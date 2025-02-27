@@ -1,18 +1,18 @@
 import supabase from '../config/supabase.js';
 
 /**
- * Log an access attempt (Optimized)
+ * Log Access Granted (Successful Entry)
  */
-export const logAccess = async (rfid_uid, guest_id, access_status, door_unlocked = false) => {
+export const saveAccessGranted = async (rfid_uid, guest_id) => {
     try {
         const { data, error } = await supabase
             .from('access_logs')
             .insert([
                 {
                     rfid_uid,
-                    guest_id,      // <-- can be null if unassigned
-                    access_status, // "granted" or "denied"
-                    door_unlocked, // true or false
+                    guest_id,
+                    access_status: "granted",
+                    door_unlocked: true,
                     timestamp: new Date().toISOString(),
                 }
             ])
@@ -26,22 +26,29 @@ export const logAccess = async (rfid_uid, guest_id, access_status, door_unlocked
 
         return { data };
     } catch (err) {
-        console.error('Unexpected error in logAccess:', err);
+        console.error('Unexpected error in saveAccessGranted:', err);
         return { data: null, error: err };
     }
 };
 
 /**
- * Fetch access logs for a given guest ID (Optimized)
+ * Log Access Denied (Failed Entry)
  */
-export const getAccessLogs = async (guest_id, limit = 10, offset = 0) => {
+export const saveAccessDenied = async (rfid_uid) => {
     try {
         const { data, error } = await supabase
             .from('access_logs')
+            .insert([
+                {
+                    rfid_uid,
+                    guest_id: null,  // No guest assigned
+                    access_status: "denied",
+                    door_unlocked: false,
+                    timestamp: new Date().toISOString(),
+                }
+            ])
             .select('id, rfid_uid, guest_id, access_status, door_unlocked, timestamp')
-            .eq('guest_id', guest_id)
-            .order('timestamp', { ascending: false })
-            .range(offset, offset + limit - 1); // Efficient pagination
+            .single();
 
         if (error) {
             console.error('Database error:', error);
@@ -50,7 +57,7 @@ export const getAccessLogs = async (guest_id, limit = 10, offset = 0) => {
 
         return { data };
     } catch (err) {
-        console.error('Unexpected error in getAccessLogs:', err);
+        console.error('Unexpected error in saveAccessDenied:', err);
         return { data: null, error: err };
     }
 };

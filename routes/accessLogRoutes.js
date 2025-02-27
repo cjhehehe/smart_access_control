@@ -1,9 +1,11 @@
 import express from 'express';
-import { logAccessAttempt, getAccessLogsByGuest } from '../controllers/accessLogController.js';
+import { logAccessGranted, logAccessDenied, getAccessLogsByGuest } from '../controllers/accessLogController.js';
 
 const router = express.Router();
 
-router.post('/log', logAccessAttempt);
+// Separate endpoints for granted and denied access logs
+router.post('/granted', logAccessGranted);
+router.post('/denied', logAccessDenied);
 router.get('/:guest_id', getAccessLogsByGuest);
 
 export default router;

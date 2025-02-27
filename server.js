@@ -13,6 +13,7 @@ import serviceRequestRoutes from './routes/serviceRequestRoutes.js';
 import accessLogRoutes from './routes/accessLogRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 
+import { logAccessGranted, logAccessDenied } from './controllers/accessLogController.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 
 dotenv.config();
@@ -34,6 +35,10 @@ app.use('/api/rfid', rfidRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/access-logs', accessLogRoutes);
 app.use('/api/feedback', feedbackRoutes);
+
+// Additional API Endpoints for Access Logging
+app.post('/api/access-logs/granted', logAccessGranted);
+app.post('/api/access-logs/denied', logAccessDenied);
 
 // Error Handling Middleware
 app.use(errorHandler);
