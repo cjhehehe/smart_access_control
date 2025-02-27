@@ -19,18 +19,44 @@ export const logAccessAttempt = async (req, res) => {
             .eq('rfid_uid', rfid_uid)
             .maybeSingle(); // Prevents error if no data is found
 
+        // If no assigned guest, log a denied attempt anyway
         if (!rfidTag?.assigned_to) {
-            return res.status(404).json({ message: 'RFID tag not found or not assigned to any guest' });
+            // Log the denied attempt with guest_id = null
+            const { data: logData, error: logError } = await logAccess(
+                rfid_uid,
+                null, // No guest ID
+                'denied',
+                false
+            );
+
+            if (logError) {
+                console.error('Database error (denied attempt):', logError);
+                return res.status(500).json({
+                    message: 'Database error: Unable to log denied attempt',
+                    error: logError.message
+                });
+            }
+
+            // Return 403 or 404 to indicate invalid/unassigned RFID
+            // (Choose whichever fits your logic; 403 = forbidden)
+            return res.status(403).json({
+                message: 'Access denied. RFID tag not found or not assigned to any guest',
+                data: logData
+            });
         }
 
-        // Log access attempt (Optimized)
+        // If we reach here, the RFID is valid and assigned
         const { data, error } = await logAccess(rfid_uid, rfidTag.assigned_to, access_status, door_unlocked);
 
         if (error) {
             console.error('Database error:', error);
-            return res.status(500).json({ message: 'Database error: Unable to log access attempt', error: error.message });
+            return res.status(500).json({
+                message: 'Database error: Unable to log access attempt',
+                error: error.message
+            });
         }
 
+        // Return success
         res.status(201).json({ message: 'Access attempt logged successfully', data });
     } catch (error) {
         console.error('Unexpected Error:', error);
@@ -55,7 +81,10 @@ export const getAccessLogsByGuest = async (req, res) => {
 
         if (error) {
             console.error('Database error:', error);
-            return res.status(500).json({ message: 'Database error: Unable to fetch access logs', error: error.message });
+            return res.status(500).json({
+                message: 'Database error: Unable to fetch access logs',
+                error: error.message
+            });
         }
 
         if (!data || data.length === 0) {

@@ -10,13 +10,13 @@ export const logAccess = async (rfid_uid, guest_id, access_status, door_unlocked
             .insert([
                 {
                     rfid_uid,
-                    guest_id,
-                    access_status,
-                    door_unlocked,
+                    guest_id,      // <-- can be null if unassigned
+                    access_status, // "granted" or "denied"
+                    door_unlocked, // true or false
                     timestamp: new Date().toISOString(),
                 }
             ])
-            .select('id, rfid_uid, guest_id, access_status, door_unlocked, timestamp') // Select only required fields
+            .select('id, rfid_uid, guest_id, access_status, door_unlocked, timestamp')
             .single();
 
         if (error) {
