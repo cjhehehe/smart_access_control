@@ -11,7 +11,7 @@ import { getAllAdmins } from './models/adminModel.js';
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
  *  3) If current time is 10 minutes before check_out, sends a "stay ending soon" notification.
- *  4) If current time is within 1 minute of check_out, auto-checks out the room.
+ *  4) If current time is within ±1 minute of check_out, auto-checks out the room.
  */
 export function startCronJobs() {
   // Runs every minute
@@ -43,7 +43,7 @@ export function startCronJobs() {
 
       const checkOutTime = new Date(room.check_out);
       const diffMs = checkOutTime.getTime() - now.getTime();
-      const diffMinutes = diffMs / (1000 * 60);  // Use float value for precision
+      const diffMinutes = diffMs / (1000 * 60);  // float value for precision
 
       // Log for debugging
       console.log(
@@ -57,7 +57,7 @@ export function startCronJobs() {
       }
 
       // B) If current time is within ±1 minute of check_out, auto-check-out the room.
-      if (Math.abs(diffMinutes) <= 1) {
+      if (diffMinutes >= -1 && diffMinutes <= 1) {
         await autoCheckOutRoom(room);
       }
     }
