@@ -169,3 +169,31 @@ export const unassignRFID = async (rfid_uid) => {
     return { data: null, error: err };
   }
 };
+
+/**
+ * Reset all RFID tags for a specific guest (active/assigned -> available).
+ */
+export const resetRFIDByGuest = async (guest_id) => {
+  try {
+    // Only reset RFID tags that are active or assigned
+    const { data, error } = await supabase
+      .from('rfid_tags')
+      .update({
+        guest_id: null,
+        guest_name: null,
+        status: 'available',
+      })
+      .eq('guest_id', guest_id)
+      .in('status', ['active', 'assigned'])
+      .select();
+
+    if (error) {
+      console.error('Error resetting RFID for guest:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('Unexpected error in resetRFIDByGuest:', err);
+    return { data: null, error: err };
+  }
+};
