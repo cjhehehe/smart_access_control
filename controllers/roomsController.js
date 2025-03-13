@@ -16,18 +16,18 @@ import {
  * POST /api/rooms
  * Create a new room record (initial status = 'reserved').
  * Use this endpoint when creating a reservation.
- * 
- * Expects:
+ *
+ * Expects in req.body:
  *  - guest_id (number)
- *  - guest_name (string, optional)
  *  - room_number (string or number)
  *  - hours_stay (number)
  *
- * Stores registration_time in UTC (using new Date().toISOString()).
+ * We no longer store guest_name in the 'rooms' table.
+ * registration_time is stored as a UTC timestamp (new Date().toISOString()).
  */
 export const addRoom = async (req, res) => {
   try {
-    const { guest_id, guest_name, room_number, hours_stay } = req.body;
+    const { guest_id, room_number, hours_stay } = req.body;
 
     // Basic checks
     if (!guest_id || !room_number || hours_stay == null) {
@@ -52,7 +52,7 @@ export const addRoom = async (req, res) => {
       console.error('Error checking existing room:', findError);
       return res.status(500).json({
         success: false,
-        message: 'Error checking existing room',
+        message: 'Database error: Error checking existing room',
         error: findError,
       });
     }
@@ -66,11 +66,10 @@ export const addRoom = async (req, res) => {
     // Prepare new room data
     const newRoom = {
       guest_id,
-      guest_name: guest_name || null,
       room_number: room_number.toString(),
-      hours_stay: numericHoursStay, // stored as a numeric value
+      hours_stay: numericHoursStay, // numeric in DB
       status: 'reserved',
-      registration_time: new Date().toISOString(), // UTC timestamp
+      registration_time: new Date().toISOString(), // store in UTC
     };
 
     const { data, error } = await createRoom(newRoom);
@@ -78,14 +77,14 @@ export const addRoom = async (req, res) => {
       console.error('Error inserting room data into DB:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error inserting room data into DB',
+        message: 'Database error: Error inserting room data',
         error,
       });
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Room created successfully',
+      message: 'Room created successfully (status=reserved)',
       data,
     });
   } catch (error) {
@@ -99,17 +98,16 @@ export const addRoom = async (req, res) => {
  * Assign (reserve) a room by room_number (status -> 'reserved').
  * Only updates if the room is currently 'available'.
  *
- * Expects:
+ * Expects in req.body:
  *  - room_number (string or number)
  *  - guest_id (number)
- *  - guest_name (string, optional)
  *  - hours_stay (number)
  *
  * Sets registration_time to current UTC time.
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
-    const { room_number, guest_id, guest_name, hours_stay } = req.body;
+    const { room_number, guest_id, hours_stay } = req.body;
     if (!room_number || !guest_id || hours_stay == null) {
       return res.status(400).json({
         success: false,
@@ -128,13 +126,12 @@ export const assignRoomByNumber = async (req, res) => {
 
     const updateFields = {
       guest_id,
-      guest_name: guest_name || null,
       hours_stay: numericHoursStay,
       status: 'reserved',
-      registration_time: new Date().toISOString(), // UTC timestamp
+      registration_time: new Date().toISOString(), // store in UTC
     };
 
-    // Only update if the room is available (i.e. not reserved, occupied, or maintenance)
+    // Only update if the room is 'available'
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
@@ -143,7 +140,7 @@ export const assignRoomByNumber = async (req, res) => {
       console.error('Error updating room by number:', error);
       return res.status(500).json({
         success: false,
-        message: 'Error updating room record in DB',
+        message: 'Database error: Error updating room record',
         error,
       });
     }
@@ -175,7 +172,7 @@ export const getRoom = async (req, res) => {
     const { data, error } = await getRoomById(id);
     if (error) {
       console.error('Error fetching room data:', error);
-      return res.status(500).json({ success: false, message: 'Error fetching room data', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error fetching room data', error });
     }
     if (!data) {
       return res.status(404).json({ success: false, message: 'Room not found' });
@@ -196,7 +193,7 @@ export const getRooms = async (req, res) => {
     const { data, error } = await getAllRooms();
     if (error) {
       console.error('Error fetching rooms:', error);
-      return res.status(500).json({ success: false, message: 'Error fetching rooms', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error fetching rooms', error });
     }
     return res.status(200).json({ success: true, data });
   } catch (error) {
@@ -208,13 +205,13 @@ export const getRooms = async (req, res) => {
 /**
  * PUT /api/rooms/:id
  * Update specific fields of a room by its ID.
- * 
+ *
  * Example body:
  *  {
- *    "guest_name": "New Guest",
- *    "hours_stay": 5
+ *    "hours_stay": 5,
+ *    "status": "maintenance" // etc.
  *  }
- * 
+ *
  * If hours_stay is provided, it must be a positive decimal.
  */
 export const modifyRoom = async (req, res) => {
@@ -240,7 +237,7 @@ export const modifyRoom = async (req, res) => {
     const { data, error } = await updateRoom(id, updateFields);
     if (error) {
       console.error('Error updating room data:', error);
-      return res.status(500).json({ success: false, message: 'Error updating room data', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error updating room data', error });
     }
 
     return res.status(200).json({
@@ -264,7 +261,7 @@ export const removeRoom = async (req, res) => {
     const { data, error } = await deleteRoom(id);
     if (error) {
       console.error('Error deleting room:', error);
-      return res.status(500).json({ success: false, message: 'Error deleting room', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error deleting room', error });
     }
     return res.status(200).json({ success: true, message: 'Room deleted successfully', data });
   } catch (error) {
@@ -277,7 +274,7 @@ export const removeRoom = async (req, res) => {
  * POST /api/rooms/:id/checkin
  * Check a guest into a room (manual usage).
  * Sets check_in time (UTC) and updates status to 'occupied'.
- * 
+ *
  * Body can include:
  *  - check_in: override time in ISO string if needed
  */
@@ -285,13 +282,12 @@ export const roomCheckIn = async (req, res) => {
   try {
     const { id } = req.params;
     const { check_in } = req.body;
-    // Use provided time if valid, else default to now in UTC
     const checkInTime = check_in || new Date().toISOString();
 
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('Error during check-in:', error);
-      return res.status(500).json({ success: false, message: 'Error during check-in', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error during check-in', error });
     }
     return res.status(200).json({ success: true, message: 'Check-in successful', data });
   } catch (error) {
@@ -304,7 +300,7 @@ export const roomCheckIn = async (req, res) => {
  * POST /api/rooms/:id/checkout
  * Check a guest out from a room (manual usage).
  * Sets check_out time (UTC) and updates status to 'available'.
- * 
+ *
  * Body can include:
  *  - check_out: override time in ISO string if needed
  */
@@ -312,13 +308,12 @@ export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
     const { check_out } = req.body;
-    // Use provided time if valid, else default to now in UTC
     const checkOutTime = check_out || new Date().toISOString();
 
     const { data, error } = await checkOutRoom(id, checkOutTime);
     if (error) {
       console.error('Error during check-out:', error);
-      return res.status(500).json({ success: false, message: 'Error during check-out', error });
+      return res.status(500).json({ success: false, message: 'Database error: Error during check-out', error });
     }
     return res.status(200).json({ success: true, message: 'Check-out successful', data });
   } catch (error) {

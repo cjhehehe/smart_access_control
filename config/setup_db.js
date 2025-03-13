@@ -74,7 +74,7 @@ async function resetDatabase() {
     .from('rfid_tags')
     .update({
       guest_id: null,
-      guest_name: null,
+      // guest_name: null,
       status: 'available'
     })
     .gt('id', 0));
@@ -89,7 +89,7 @@ async function resetDatabase() {
     .from('rooms')
     .update({
       guest_id: null,
-      guest_name: null,
+      // guest_name: null,
       hours_stay: null,
       registration_time: null,
       check_in: null,
