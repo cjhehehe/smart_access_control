@@ -10,7 +10,7 @@ import { getAllAdmins } from './models/adminModel.js';
  * startCronJobs()
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
- *  3) If current time is near check_out time (e.g. exactly 10 min left) -> send "stay ending soon" notification.
+ *  3) If current time is near check_out time (exactly 10 min left) -> "stay ending soon" notification.
  *  4) If current time >= check_out time -> auto-check-out the guest.
  */
 export function startCronJobs() {
@@ -57,7 +57,18 @@ export function startCronJobs() {
       }
 
       // B) If current time >= check_out => auto-check-out
+      //    BUT add a small buffer (e.g. 5 min) in case of minor clock offsets or rounding
       if (diffMinutes <= 0) {
+        // If it's slightly behind but within a small grace period, skip this cycle
+        // Adjust the buffer (in minutes) to your preference
+        if (diffMinutes > -5) {
+          console.log(
+            `[CRON] Room ${room.room_number} is past check_out, but within the 5-minute buffer. Skipping auto-check-out this cycle.`
+          );
+          continue;
+        }
+
+        // If it's more than 5 minutes overdue, proceed with auto-check-out
         await autoCheckOutRoom(room);
       }
     }
@@ -109,6 +120,7 @@ async function sendStayEndingNotification(room) {
  *  - room.status -> 'available'
  *  - check_in -> null
  *  - check_out -> null
+ *  - hours_stay -> null (removing it as requested)
  *  - guest_id -> null
  *  - guest_name -> null
  *  - RFID(s) for that guest -> 'available'
@@ -119,7 +131,7 @@ async function autoCheckOutRoom(room) {
     console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
 
     // 1) Update the room record
-    //    - Clear out the guest_id, guest_name
+    //    - Clear out the guest_id, guest_name, hours_stay
     //    - Set status back to 'available', check_in & check_out to null
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
@@ -127,6 +139,7 @@ async function autoCheckOutRoom(room) {
         status: 'available',
         check_in: null,
         check_out: null,
+        hours_stay: null,  // remove hours_stay on check-out
         guest_id: null,
         guest_name: null,
       })
