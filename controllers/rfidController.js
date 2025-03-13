@@ -245,7 +245,7 @@ export const unassignRFIDTag = async (req, res) => {
 
 /**
  * POST /api/rfid/verify
- * Production-grade verification logic.
+ * Production-grade verification logic that never unlocks if no valid room is found.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -300,25 +300,28 @@ export const verifyRFID = async (req, res) => {
     // 4) Determine the target room.
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
+      // Attempt to auto-detect exactly one 'reserved' or 'occupied' room for that guest.
       const { data: possibleRooms, error: fetchError } = await supabase
         .from('rooms')
         .select('*')
         .eq('guest_id', rfidData.guest_id)
         .in('status', ['reserved', 'occupied']);
       if (fetchError) {
-        console.error('[verifyRFID] Error fetching rooms for auto-detect:', fetchError);
+        console.error('[verifyRFID] Error fetching rooms:', fetchError);
         return res.status(500).json({
           success: false,
           message: 'Error fetching room information.',
         });
       }
       if (!possibleRooms || possibleRooms.length === 0) {
+        // No valid room => Return success=false
         return res.status(403).json({
           success: false,
           message: 'No reserved/occupied room found for this guest.',
         });
       }
       if (possibleRooms.length > 1) {
+        // More than one => 400
         return res.status(400).json({
           success: false,
           message: 'Multiple rooms found for this guest. Please specify a room_number.',
@@ -340,6 +343,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
     if (!roomData) {
+      // If the user hasn't reserved this room, deny.
       return res.status(403).json({
         success: false,
         message: `Access denied: Guest has not reserved or is not occupying room ${targetRoomNumber}.`,
@@ -348,7 +352,7 @@ export const verifyRFID = async (req, res) => {
 
     // 6) Check timing based on room status.
     if (roomData.status === 'occupied') {
-      // For an occupied room, check the stored check_out time.
+      // If there's a check_out time, ensure we haven't passed it
       if (roomData.check_out) {
         const now = new Date();
         const checkOutTime = new Date(roomData.check_out);
@@ -362,7 +366,7 @@ export const verifyRFID = async (req, res) => {
         }
       }
     } else if (roomData.status === 'reserved') {
-      // Upgrade reserved room to occupied
+      // If it's reserved, upgrade to occupied
       const rawHours = roomData.hours_stay;
       let hoursStay = rawHours ? parseFloat(rawHours) : 0;
       if (isNaN(hoursStay) || hoursStay <= 0) {
@@ -406,7 +410,8 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 8) Return final data for successful verification.
+    // 8) Return final data for successful verification
+    // We always have a valid room at this point
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
