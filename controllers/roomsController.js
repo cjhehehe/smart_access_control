@@ -15,21 +15,11 @@ import {
 /**
  * POST /api/rooms
  * Create a new room record (initial status = 'reserved').
- * Use this endpoint when creating a reservation.
- *
- * Expects in req.body:
- *  - guest_id (number)
- *  - room_number (string or number)
- *  - hours_stay (number)
- *
- * We no longer store guest_name in the 'rooms' table.
- * registration_time is stored as a UTC timestamp (new Date().toISOString()).
  */
 export const addRoom = async (req, res) => {
   try {
     const { guest_id, room_number, hours_stay } = req.body;
 
-    // Basic checks
     if (!guest_id || !room_number || hours_stay == null) {
       return res.status(400).json({
         success: false,
@@ -67,9 +57,9 @@ export const addRoom = async (req, res) => {
     const newRoom = {
       guest_id,
       room_number: room_number.toString(),
-      hours_stay: numericHoursStay, // numeric in DB
+      hours_stay: numericHoursStay,
       status: 'reserved',
-      registration_time: new Date().toISOString(), // store in UTC
+      registration_time: new Date().toISOString(),
     };
 
     const { data, error } = await createRoom(newRoom);
@@ -96,14 +86,6 @@ export const addRoom = async (req, res) => {
 /**
  * PUT /api/rooms/assign
  * Assign (reserve) a room by room_number (status -> 'reserved').
- * Only updates if the room is currently 'available'.
- *
- * Expects in req.body:
- *  - room_number (string or number)
- *  - guest_id (number)
- *  - hours_stay (number)
- *
- * Sets registration_time to current UTC time.
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -115,7 +97,6 @@ export const assignRoomByNumber = async (req, res) => {
       });
     }
 
-    // Parse hours_stay as float
     const numericHoursStay = parseFloat(hours_stay);
     if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
       return res.status(400).json({
@@ -128,14 +109,13 @@ export const assignRoomByNumber = async (req, res) => {
       guest_id,
       hours_stay: numericHoursStay,
       status: 'reserved',
-      registration_time: new Date().toISOString(), // store in UTC
+      registration_time: new Date().toISOString(),
     };
 
     // Only update if the room is 'available'
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
-
     if (error) {
       console.error('Error updating room by number:', error);
       return res.status(500).json({
@@ -164,7 +144,6 @@ export const assignRoomByNumber = async (req, res) => {
 
 /**
  * GET /api/rooms/:id
- * Retrieve a single room by ID.
  */
 export const getRoom = async (req, res) => {
   try {
@@ -186,7 +165,6 @@ export const getRoom = async (req, res) => {
 
 /**
  * GET /api/rooms
- * Retrieve all room records.
  */
 export const getRooms = async (req, res) => {
   try {
@@ -205,14 +183,6 @@ export const getRooms = async (req, res) => {
 /**
  * PUT /api/rooms/:id
  * Update specific fields of a room by its ID.
- *
- * Example body:
- *  {
- *    "hours_stay": 5,
- *    "status": "maintenance" // etc.
- *  }
- *
- * If hours_stay is provided, it must be a positive decimal.
  */
 export const modifyRoom = async (req, res) => {
   try {
@@ -253,7 +223,6 @@ export const modifyRoom = async (req, res) => {
 
 /**
  * DELETE /api/rooms/:id
- * Delete a room record by ID.
  */
 export const removeRoom = async (req, res) => {
   try {
@@ -272,11 +241,7 @@ export const removeRoom = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkin
- * Check a guest into a room (manual usage).
- * Sets check_in time (UTC) and updates status to 'occupied'.
- *
- * Body can include:
- *  - check_in: override time in ISO string if needed
+ * Sets check_in time and status='occupied'.
  */
 export const roomCheckIn = async (req, res) => {
   try {
@@ -298,11 +263,7 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out from a room (manual usage).
- * Sets check_out time (UTC) and updates status to 'available'.
- *
- * Body can include:
- *  - check_out: override time in ISO string if needed
+ * Sets check_out time and status='available'.
  */
 export const roomCheckOut = async (req, res) => {
   try {

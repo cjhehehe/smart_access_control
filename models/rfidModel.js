@@ -1,10 +1,8 @@
 // models/rfidModel.js
-
 import supabase from '../config/supabase.js';
 
 /**
- * Find an RFID by its UID (rfid_uid).
- * We only select columns that exist in rfid_tags: id, rfid_uid, guest_id, status.
+ * Find an RFID by its UID.
  */
 export const findRFIDByUID = async (rfid_uid) => {
   try {
@@ -25,13 +23,8 @@ export const findRFIDByUID = async (rfid_uid) => {
   }
 };
 
-/**
- * Fetch ALL RFID tags.
- */
-
 export const getAllRFIDs = async () => {
   try {
-    // Select * if you want all columns, or specify columns if you only need a subset.
     const { data, error } = await supabase
       .from('rfid_tags')
       .select('*');
@@ -46,12 +39,8 @@ export const getAllRFIDs = async () => {
   }
 };
 
-/**
- * Fetch only RFID tags that are 'available'.
- */
 export const getAvailableRFIDs = async () => {
   try {
-    // Only select columns that actually exist in rfid_tags
     const { data, error } = await supabase
       .from('rfid_tags')
       .select('id, rfid_uid, status')
@@ -70,11 +59,9 @@ export const getAvailableRFIDs = async () => {
 
 /**
  * Assign an RFID to a guest (status -> 'assigned').
- * Must be 'available' before assignment.
  */
 export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
   try {
-    // Update only columns that exist. No 'guest_name' if it's not in your DB.
     const { data, error } = await supabase
       .from('rfid_tags')
       .update({
@@ -82,17 +69,13 @@ export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
         status: 'assigned',
       })
       .eq('rfid_uid', rfid_uid)
-      .eq('status', 'available') // Must match "available" to be updated
+      .eq('status', 'available')
       .select('id, rfid_uid, guest_id, status')
       .single();
 
     if (error) {
       console.error('[assignRFIDToGuest] Error assigning RFID:', error);
       return { data: null, error };
-    }
-    // If data is null, that means no row was updated (mismatch on eq conditions).
-    if (!data) {
-      console.warn(`[assignRFIDToGuest] No row updated for RFID ${rfid_uid}. Possibly not 'available'.`);
     }
     return { data, error: null };
   } catch (err) {
@@ -103,7 +86,6 @@ export const assignRFIDToGuest = async (rfid_uid, guest_id) => {
 
 /**
  * Activate an RFID (status -> 'active').
- * Must be 'assigned' before activation.
  */
 export const activateRFID = async (rfid_uid) => {
   try {
@@ -135,7 +117,7 @@ export const markRFIDLost = async (rfid_uid) => {
       .from('rfid_tags')
       .update({ status: 'lost' })
       .eq('rfid_uid', rfid_uid)
-      .neq('status', 'lost') // Only update if current status is not already 'lost'
+      .neq('status', 'lost')
       .select('id, rfid_uid, guest_id, status')
       .single();
 
@@ -152,7 +134,6 @@ export const markRFIDLost = async (rfid_uid) => {
 
 /**
  * Unassign an RFID (status -> 'available').
- * Clears guest_id, sets status to 'available'.
  */
 export const unassignRFID = async (rfid_uid) => {
   try {
@@ -163,7 +144,7 @@ export const unassignRFID = async (rfid_uid) => {
         status: 'available',
       })
       .eq('rfid_uid', rfid_uid)
-      .neq('status', 'available') // Only unassign if not already 'available'
+      .neq('status', 'available')
       .select('id, rfid_uid, guest_id, status')
       .single();
 
@@ -179,8 +160,7 @@ export const unassignRFID = async (rfid_uid) => {
 };
 
 /**
- * Reset all RFID tags for a specific guest to 'available'
- * if they are 'active' or 'assigned'.
+ * Reset all RFID tags for a specific guest to 'available' if they are 'active' or 'assigned'.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {

@@ -10,13 +10,12 @@ import {
   markRFIDLost,
   unassignRFID,
 } from '../models/rfidModel.js';
-import { findUserById } from '../models/userModel.js';  // Ensure userModel is correct
+import { findUserById } from '../models/userModel.js';
 import supabase from '../config/supabase.js';
 import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
 
 /**
  * GET /api/rfid/all
- * Fetch all RFID tags (admin usage).
  */
 export const getAllRFIDTags = async (req, res) => {
   try {
@@ -41,7 +40,6 @@ export const getAllRFIDTags = async (req, res) => {
 
 /**
  * GET /api/rfid/available
- * Fetch only the RFID tags that are currently in 'available' status.
  */
 export const getAvailableRFIDTags = async (req, res) => {
   try {
@@ -66,10 +64,6 @@ export const getAvailableRFIDTags = async (req, res) => {
 
 /**
  * POST /api/rfid/assign
- * Assign an RFID card to a guest (status -> 'assigned').
- * Expects in req.body:
- *  - guest_id: number
- *  - rfid_uid: string
  */
 export const assignRFID = async (req, res) => {
   try {
@@ -116,7 +110,7 @@ export const assignRFID = async (req, res) => {
       });
     }
 
-    // 3) Assign RFID if it is 'available'
+    // 3) Assign RFID
     const { data, error } = await assignRFIDToGuest(rfid_uid, guest_id);
     if (error) {
       console.error('[assignRFID] Database error assigning RFID:', error);
@@ -126,7 +120,6 @@ export const assignRFID = async (req, res) => {
       });
     }
 
-    // If supabase returned null, it means the row update failed
     if (!data) {
       return res.status(400).json({
         success: false,
@@ -147,9 +140,6 @@ export const assignRFID = async (req, res) => {
 
 /**
  * POST /api/rfid/activate
- * Activate an RFID card (status -> 'active'), must already be 'assigned'.
- * Expects in req.body:
- *  - rfid_uid: string
  */
 export const activateRFIDTag = async (req, res) => {
   try {
@@ -185,9 +175,6 @@ export const activateRFIDTag = async (req, res) => {
 
 /**
  * POST /api/rfid/lost
- * Mark an RFID as lost (status -> 'lost').
- * Expects in req.body:
- *  - rfid_uid: string
  */
 export const markRFIDAsLost = async (req, res) => {
   try {
@@ -223,9 +210,6 @@ export const markRFIDAsLost = async (req, res) => {
 
 /**
  * POST /api/rfid/unassign
- * Unassign an RFID (status -> 'available').
- * Expects in req.body:
- *  - rfid_uid: string
  */
 export const unassignRFIDTag = async (req, res) => {
   try {
@@ -261,17 +245,7 @@ export const unassignRFIDTag = async (req, res) => {
 
 /**
  * POST /api/rfid/verify
- * Verify an RFID for door access (production-grade, robust logic):
- *  1) RFID must have status 'assigned' or 'active'.
- *  2) RFID must be linked to a valid guest.
- *  3) The guest must have exactly one 'reserved' or 'occupied' room (unless room_number is given).
- *  4) If the room is 'reserved', automatically set it to 'occupied' and compute check_in/check_out.
- *  5) If the room’s check_out time has passed, auto-check it out and deny access.
- *  6) Return the final room, RFID, and guest data if access is valid.
- *
- * Request Body:
- *  - rfid_uid (required): string
- *  - room_number (optional): string or number
+ * Production-grade verification logic.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -323,10 +297,9 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Guest not found.' });
     }
 
-    // 4) Determine the target room: either the provided room_number or auto-detect a single match.
+    // 4) Determine the target room.
     let targetRoomNumber = room_number;
     if (!targetRoomNumber) {
-      // Auto-detect exactly one 'reserved' or 'occupied' room for that guest
       const { data: possibleRooms, error: fetchError } = await supabase
         .from('rooms')
         .select('*')
@@ -373,41 +346,51 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 6) If the room's check_out time has passed, auto-checkout and deny access.
-    if (roomData.check_out) {
-      const now = new Date();
-      const checkOutTime = new Date(roomData.check_out);
-      if (now >= checkOutTime) {
-        console.log(`[verifyRFID] Room ${roomData.room_number} check_out time exceeded. Auto-checking out.`);
-        // Auto-checkout
-        const { data: updatedRoom, error: checkOutError } = await supabase
-          .from('rooms')
-          .update({
-            status: 'available',
-            check_in: null,
-            check_out: null,
-            hours_stay: null,
-            guest_id: null,
-          })
-          .eq('id', roomData.id)
-          .single();
-        if (checkOutError) {
-          console.error('[verifyRFID] Error auto-checking out room:', checkOutError);
-          return res.status(500).json({
+    // 6) Check timing based on room status.
+    if (roomData.status === 'occupied') {
+      // For an occupied room, check the stored check_out time.
+      if (roomData.check_out) {
+        const now = new Date();
+        const checkOutTime = new Date(roomData.check_out);
+        if (now >= checkOutTime) {
+          console.log(`[verifyRFID] Room ${roomData.room_number} check_out time has passed. Denying access.`);
+          return res.status(403).json({
             success: false,
-            message: 'Error during auto-checkout process.',
+            message: 'Access denied: Your stay has ended.',
+            data: { rfid: rfidData, guest: guestData, room: roomData },
           });
         }
-        return res.status(403).json({
+      }
+    } else if (roomData.status === 'reserved') {
+      // Upgrade reserved room to occupied
+      const rawHours = roomData.hours_stay;
+      let hoursStay = rawHours ? parseFloat(rawHours) : 0;
+      if (isNaN(hoursStay) || hoursStay <= 0) {
+        console.warn(`[verifyRFID] Invalid hours_stay (${rawHours}). Defaulting to 1 hour.`);
+        hoursStay = 1;
+      }
+      const checkInTime = new Date();
+      const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
+
+      console.log(`[verifyRFID] Upgrading room ${roomData.room_number} from 'reserved' to 'occupied'.`);
+
+      const { data: occupiedRoom, error: checkInError } = await supabase
+        .from('rooms')
+        .update({
+          status: 'occupied',
+          check_in: checkInTime.toISOString(),
+          check_out: checkOutTime.toISOString(),
+        })
+        .eq('id', roomData.id)
+        .single();
+      if (checkInError) {
+        console.error('[verifyRFID] Error updating room to occupied:', checkInError);
+        return res.status(500).json({
           success: false,
-          message: 'Access denied: Your stay has ended and the room has been auto-checked out.',
-          data: {
-            rfid: rfidData,
-            guest: guestData,
-            room: updatedRoom,
-          },
+          message: 'Error updating room to occupied.',
         });
       }
+      roomData = occupiedRoom;
     }
 
     // 7) If RFID is still 'assigned', upgrade it to 'active'.
@@ -423,42 +406,7 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 8) If the room is 'reserved', upgrade it to 'occupied' and compute check_in/check_out.
-    if (roomData.status === 'reserved') {
-      const rawHours = roomData.hours_stay;
-      let hoursStay = rawHours ? parseFloat(rawHours) : 0;
-      if (isNaN(hoursStay) || hoursStay <= 0) {
-        console.warn(`[verifyRFID] Invalid hours_stay (${rawHours}). Defaulting to 1 hour.`);
-        hoursStay = 1;
-      }
-      const checkInTime = new Date();
-      const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
-
-      console.log(`[verifyRFID] Room ${roomData.room_number} was 'reserved'. Now occupying with new check_in/check_out.`);
-
-      const { data: occupiedRoom, error: checkInError } = await supabase
-        .from('rooms')
-        .update({
-          status: 'occupied',
-          check_in: checkInTime.toISOString(),
-          check_out: checkOutTime.toISOString(),
-        })
-        .eq('id', roomData.id)
-        .single();
-
-      if (checkInError) {
-        console.error('[verifyRFID] Error updating room to occupied:', checkInError);
-        return res.status(500).json({
-          success: false,
-          message: 'Error updating room to occupied.',
-        });
-      }
-      roomData = occupiedRoom;
-    } else {
-      console.log(`[verifyRFID] Room ${roomData.room_number} is already '${roomData.status}'.`);
-    }
-
-    // 9) Return the final data for successful verification.
+    // 8) Return final data for successful verification.
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',

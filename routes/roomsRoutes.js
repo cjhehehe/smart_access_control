@@ -24,8 +24,7 @@ router.get('/', getRooms);
 router.get('/:id', getRoom);
 
 /**
- * IMPORTANT: Place this route above the '/:id' route
- * so Express doesn't interpret "assign" as an :id.
+ * IMPORTANT: Place this route above '/:id' so Express doesn't interpret "assign" as an :id.
  */
 router.put('/assign', assignRoomByNumber);
 
