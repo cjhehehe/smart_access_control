@@ -43,6 +43,28 @@ export const findRoomByNumber = async (roomNumber) => {
 };
 
 /**
+ * (NEW) Find a room by guest_id AND room_number
+ */
+export const findRoomByGuestAndNumber = async (guestId, roomNumber) => {
+  try {
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('guest_id', guestId)
+      .eq('room_number', roomNumber.toString())
+      .maybeSingle();
+    if (error) {
+      console.error('Error finding room by guest & number:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('Unexpected error in findRoomByGuestAndNumber:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
  * Fetch a room record by its ID.
  */
 export const getRoomById = async (roomId) => {

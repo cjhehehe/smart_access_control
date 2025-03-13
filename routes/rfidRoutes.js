@@ -30,7 +30,7 @@ router.post('/lost', markRFIDAsLost);
 // Unassign (status -> 'available')
 router.post('/unassign', unassignRFIDTag);
 
-// Verify (check if it's valid/active)
+// Verify (check if it's valid/active + correct room)
 router.post('/verify', verifyRFID);
 
 export default router;
