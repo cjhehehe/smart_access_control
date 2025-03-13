@@ -10,7 +10,10 @@ import {
   unassignRFID,
 } from '../models/rfidModel.js';
 import { findUserById } from '../models/userModel.js';
-import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
+import {
+  findRoomByGuestAndNumber,
+  checkInRoom,
+} from '../models/roomsModel.js';
 
 /**
  * GET all RFID tags (admin usage).
@@ -219,8 +222,9 @@ export const unassignRFIDTag = async (req, res) => {
  * Verify an RFID for door access:
  * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
- * - The guest must have access to room 101
- * - If status is 'assigned' and the guest is valid for room 101, auto-upgrade RFID to 'active'.
+ * - The guest must have reserved room 101 (only that guest is allowed access)
+ *
+ * The verification logic is entirely based on the guest's reservation.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -229,7 +233,7 @@ export const verifyRFID = async (req, res) => {
       return res.status(400).json({ success: false, message: 'RFID UID is required.' });
     }
 
-    // 1) Look up RFID
+    // 1) Look up the RFID record
     let { data: rfidData, error } = await findRFIDByUID(rfid_uid);
     if (error) {
       return res.status(500).json({ success: false, message: 'Error finding RFID.' });
@@ -238,7 +242,7 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'RFID not found.' });
     }
 
-    // 2) Status check
+    // 2) Validate status – must be 'assigned' or 'active'
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -246,7 +250,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 3) Guest check
+    // 3) Verify that the RFID is linked to a guest
     if (!rfidData.guest_id) {
       return res.status(403).json({
         success: false,
@@ -258,36 +262,53 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Guest not found.' });
     }
 
-    // 4) Ensure the guest has room_number 101
-    const { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, '101');
+    // 4) Ensure the guest has reserved room number 101
+    let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, '101');
     if (roomError) {
       return res.status(500).json({
         success: false,
-        message: 'Error checking room assignment.',
+        message: 'Error checking room reservation.',
       });
     }
     if (!roomData) {
       return res.status(403).json({
         success: false,
-        message: 'Guest does not have access to room 101.',
+        message: 'Access denied: Guest has not reserved room 101.',
       });
     }
 
-    // 5) If the RFID is 'assigned', auto-activate it
+    // 5) If the RFID is 'assigned', upgrade it to 'active'
     if (rfidData.status === 'assigned') {
       const { data: updatedRFID, error: activationError } = await activateRFID(rfid_uid);
       if (activationError) {
-        console.error('Error activating RFID after successful check:', activationError);
+        console.error('Error activating RFID:', activationError);
         return res.status(500).json({
           success: false,
           message: 'Error activating RFID.',
         });
       }
-      // Overwrite rfidData with the newly updated record
       rfidData = updatedRFID;
     }
 
-    // 6) All checks passed
+    // 6) (Optional) You could perform a room check-in update here.
+    // In our case the guest’s reservation is the key: if they reserved room 101,
+    // they are granted access. (Manual check-in via admin may still be available.)
+    // Uncomment the following if you want to automatically update the room:
+    /*
+    if (roomData.status === 'reserved') {
+      const { data: occupiedRoom, error: checkInError } = await checkInRoom(roomData.id);
+      if (checkInError) {
+        console.error('Error updating room to occupied:', checkInError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error updating room to occupied.',
+        });
+      }
+      roomData = occupiedRoom;
+    }
+    */
+
+    // 7) Return the verified data
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',

@@ -1,4 +1,5 @@
 // controllers/roomsController.js
+
 import {
   createRoom,
   getRoomById,
@@ -13,7 +14,9 @@ import {
 
 /**
  * POST /api/rooms
- * Create a new room record (optional usage).
+ * Create a new room record.
+ * When a guest reserves a room, the room's status is set to 'reserved'.
+ * (Room 101 should be reserved only once.)
  */
 export const addRoom = async (req, res) => {
   try {
@@ -42,11 +45,10 @@ export const addRoom = async (req, res) => {
       });
     }
 
-    // Prepare new room data
+    // Prepare new room data; guest reservation sets status to 'reserved'
     const newRoom = {
       guest_id,
       guest_name: guest_name || null,
-      // Convert to string if your column is varchar
       room_number: room_number.toString(),
       hours_stay,
       status: 'reserved',
@@ -76,8 +78,8 @@ export const addRoom = async (req, res) => {
 
 /**
  * PUT /api/rooms/assign
- * Assign (update) an existing pre-stored room by room_number.
- * Must be status='available' to be assigned (if you only want that scenario).
+ * Assign (reserve) a room by room_number.
+ * The room must be available. Once reserved, room 101 cannot be reserved again.
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -89,7 +91,6 @@ export const assignRoomByNumber = async (req, res) => {
       });
     }
 
-    // Fields to update
     const updateFields = {
       guest_id,
       guest_name: guest_name || null,
@@ -98,7 +99,6 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
-    // We set onlyIfAvailable=true so it .eq('status','available') in the model
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
@@ -112,7 +112,6 @@ export const assignRoomByNumber = async (req, res) => {
       });
     }
     if (!data) {
-      // Means no row matched or updated
       return res.status(400).json({
         success: false,
         message: `No available room found with room_number = ${room_number}`,
@@ -214,7 +213,7 @@ export const removeRoom = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkin
- * Check a guest into a room.
+ * Check a guest into a room (manual usage).
  */
 export const roomCheckIn = async (req, res) => {
   try {
@@ -235,7 +234,7 @@ export const roomCheckIn = async (req, res) => {
 
 /**
  * POST /api/rooms/:id/checkout
- * Check a guest out from a room.
+ * Check a guest out from a room (manual usage).
  */
 export const roomCheckOut = async (req, res) => {
   try {
