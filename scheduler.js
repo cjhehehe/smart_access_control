@@ -4,17 +4,14 @@ import cron from 'node-cron';
 import supabase from './config/supabase.js';
 import { createNotification } from './models/notificationModel.js';
 import { resetRFIDByGuest } from './models/rfidModel.js';
+import { getAllAdmins } from './models/adminModel.js'; // <-- import the new function
 
 /**
  * startCronJobs()
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
- *  3) If current time is near check_out time (e.g. 10 min left) -> send "nearly ended" notification.
+ *  3) If current time is near check_out time (e.g. 10 min left) -> send "stay ending soon" notification.
  *  4) If current time >= check_out time -> auto-check-out the guest.
- * 
- * For a production system, you might:
- *  - Add logic to avoid spamming "10 minutes left" repeatedly.
- *  - Possibly store a "warning_sent" boolean in the rooms table or a separate table.
  */
 export function startCronJobs() {
   // The cron expression "* * * * *" => runs every minute
@@ -32,11 +29,9 @@ export function startCronJobs() {
       return;
     }
     if (!occupiedRooms || occupiedRooms.length === 0) {
-      // No occupied rooms to check
-      return;
+      return; // No occupied rooms to check
     }
 
-    // 2) For each occupied room, check if we are near or past check_out time
     const now = new Date();
 
     for (const room of occupiedRooms) {
@@ -47,8 +42,7 @@ export function startCronJobs() {
       const diffMs = checkOutTime - now;
       const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-      // A) If we're exactly 10 minutes from check_out, send "nearly ended" notification
-      //    (In production, you might store a "warning_sent" boolean to avoid duplicates.)
+      // A) If exactly 10 minutes from check_out, send "stay ending soon" notification
       if (diffMinutes === 10) {
         await sendStayEndingNotification(room);
       }
@@ -62,8 +56,7 @@ export function startCronJobs() {
 }
 
 /**
- * Send a "stay ending soon" notification to both the guest and the admin (if desired).
- * Adjust logic as needed for your multi-admin or multi-guest scenario.
+ * Send a "stay ending soon" notification to the guest and *all admins*.
  */
 async function sendStayEndingNotification(room) {
   try {
@@ -77,15 +70,23 @@ async function sendStayEndingNotification(room) {
       notification_type: 'stay_ending_soon',
     });
 
-    // 2) Notify an admin (if you have multiple admins, adapt accordingly)
-    await createNotification({
-      recipient_admin_id: 1, // or your actual admin ID
-      title: 'Guest Stay Ending Soon',
-      message: `Guest ID ${room.guest_id} in room ${room.room_number} has 10 minutes left.`,
-      notification_type: 'stay_ending_soon',
-    });
+    // 2) Notify all admins
+    const { data: admins, error: adminErr } = await getAllAdmins();
+    if (adminErr || !admins) {
+      console.error('[CRON] Error fetching admins for "stay ending soon":', adminErr);
+      return;
+    }
 
-    console.log(`[CRON] Sent "stay ending soon" notification for room ${room.room_number}`);
+    for (const admin of admins) {
+      await createNotification({
+        recipient_admin_id: admin.id,
+        title: 'Guest Stay Ending Soon',
+        message: `Guest ID ${room.guest_id} in room ${room.room_number} has 10 minutes left.`,
+        notification_type: 'stay_ending_soon',
+      });
+    }
+
+    console.log(`[CRON] Sent "stay ending soon" notifications for room ${room.room_number}`);
   } catch (err) {
     console.error('[CRON] Error sending stay ending notification:', err);
   }
@@ -97,7 +98,7 @@ async function sendStayEndingNotification(room) {
  *  - check_in -> null
  *  - check_out -> null
  *  - RFID(s) for that guest -> 'available'
- *  - Notifications for both guest & admin
+ *  - Notifications for both guest & all admins
  */
 async function autoCheckOutRoom(room) {
   try {
@@ -117,28 +118,34 @@ async function autoCheckOutRoom(room) {
       return;
     }
 
-    // 2) Reset the RFID(s) for the occupant
+    // 2) Reset the RFID(s) for that guest
     if (room.guest_id) {
       await resetRFIDByGuest(room.guest_id);
     }
 
-    // 3) Create notifications for both guest & admin
+    // 3) Notify the guest
     if (room.guest_id) {
-      // A) Guest notification
       await createNotification({
         recipient_guest_id: room.guest_id,
         title: 'Checked Out',
         message: `You have been automatically checked out of room ${room.room_number}.`,
         notification_type: 'auto_checkout',
       });
+    }
 
-      // B) Admin notification
-      await createNotification({
-        recipient_admin_id: 1, // or your actual admin ID
-        title: 'Guest Auto-Checked Out',
-        message: `Guest ID ${room.guest_id} was auto-checked out from room ${room.room_number}.`,
-        notification_type: 'auto_checkout',
-      });
+    // 4) Notify all admins
+    const { data: admins, error: adminErr } = await getAllAdmins();
+    if (adminErr || !admins) {
+      console.error('[CRON] Error fetching admins for auto-checkout:', adminErr);
+    } else {
+      for (const admin of admins) {
+        await createNotification({
+          recipient_admin_id: admin.id,
+          title: 'Guest Auto-Checked Out',
+          message: `Guest ID ${room.guest_id} was auto-checked out from room ${room.room_number}.`,
+          notification_type: 'auto_checkout',
+        });
+      }
     }
 
     console.log(`[CRON] Auto-checked out room ${room.room_number}, set to 'available'.`);

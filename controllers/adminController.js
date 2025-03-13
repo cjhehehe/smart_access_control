@@ -1,8 +1,11 @@
+// controllers/adminController.js
+
 import supabase from '../config/supabase.js';
 import bcrypt from 'bcryptjs';
+import { getAllAdmins } from '../models/adminModel.js';
 
 /**
- * ✅ Create Admin
+ * Create Admin
  */
 export const createAdmin = async (req, res) => {
   try {
@@ -11,7 +14,7 @@ export const createAdmin = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    console.log("🛠️ Checking existing admins...");
+    console.log("Checking existing admins...");
 
     // Check if there's already an admin in the database
     const { data: existingAdmins, error: findError } = await supabase
@@ -20,14 +23,14 @@ export const createAdmin = async (req, res) => {
       .limit(1);
 
     if (findError) {
-      console.error("❌ Error checking existing admins:", findError);
+      console.error("Error checking existing admins:", findError);
       return res.status(500).json({ message: 'Database error while checking admins' });
     }
 
-    console.log("🔐 Hashing password...");
+    console.log("Hashing password...");
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Insert new admin
+    // Insert new admin
     const { data, error } = await supabase
       .from('admins')
       .insert([{ username, password: hashedPassword, email, role }])
@@ -35,21 +38,21 @@ export const createAdmin = async (req, res) => {
       .single();
 
     if (error) {
-      console.error('❌ Error creating admin:', error);
+      console.error('Error creating admin:', error);
       return res.status(500).json({ message: 'Database error: Unable to create admin' });
     }
 
-    console.log("✅ Admin created successfully:", username);
+    console.log("Admin created successfully:", username);
     res.status(201).json({ message: 'Admin created successfully' });
 
   } catch (error) {
-    console.error('❌ Unexpected Error:', error);
+    console.error('Unexpected Error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /**
- * ✅ Login Admin
+ * Login Admin
  */
 export const loginAdmin = async (req, res) => {
   try {
@@ -58,7 +61,7 @@ export const loginAdmin = async (req, res) => {
       return res.status(400).json({ message: 'Username/Email and password are required' });
     }
 
-    console.log("🛠️ Attempting login with:", identifier);
+    console.log("Attempting login with:", identifier);
 
     // Fetch admin by username OR email
     const { data: admin, error } = await supabase
@@ -68,11 +71,11 @@ export const loginAdmin = async (req, res) => {
       .maybeSingle();
 
     if (error || !admin) {
-      console.log("❌ Admin not found:", identifier);
+      console.log("Admin not found:", identifier);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    console.log("🔍 Retrieved Admin Data:", admin);
+    console.log("Retrieved Admin Data:", admin);
 
     // Validate password
     const isPasswordValid = await bcrypt.compare(password, admin.password);
@@ -83,13 +86,13 @@ export const loginAdmin = async (req, res) => {
     res.status(200).json({ message: 'Admin logged in successfully', admin });
 
   } catch (error) {
-    console.error('❌ Unexpected Login Error:', error);
+    console.error('Unexpected Login Error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /**
- * ✅ Change Admin Password
+ * Change Admin Password
  */
 export const changeAdminPassword = async (req, res) => {
   try {
@@ -130,13 +133,13 @@ export const changeAdminPassword = async (req, res) => {
 
     return res.status(200).json({ message: 'Password updated successfully.' });
   } catch (err) {
-    console.error('❌ Error changing admin password:', err);
+    console.error('Error changing admin password:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 };
 
 /**
- * ✅ Update Admin Profile
+ * Update Admin Profile
  */
 export const updateAdminProfile = async (req, res) => {
   try {
@@ -161,25 +164,23 @@ export const updateAdminProfile = async (req, res) => {
       .eq('id', adminId);
 
     if (error) {
-      console.error('❌ Error updating admin profile:', error);
+      console.error('Error updating admin profile:', error);
       return res.status(500).json({
         message: 'Database error: Unable to update admin profile'
       });
     }
 
-    console.log(`✅ Admin (ID: ${adminId}) profile updated successfully.`);
+    console.log(`Admin (ID: ${adminId}) profile updated successfully.`);
     res.status(200).json({ message: 'Admin profile updated successfully.' });
   } catch (err) {
-    console.error('❌ Unexpected error updating admin profile:', err);
+    console.error('Unexpected error updating admin profile:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 };
 
 /**
- * ✅ Upload Admin Avatar
+ * Upload Admin Avatar
  * (Minimal example that sets 'avatar_url' if you pass a direct URL.)
- *
- * If you want to handle file uploads or base64 images, you'd do that here.
  */
 export const uploadAdminAvatar = async (req, res) => {
   try {
@@ -197,30 +198,60 @@ export const uploadAdminAvatar = async (req, res) => {
       .eq('id', adminId);
 
     if (error) {
-      console.error('❌ Error updating admin avatar URL:', error);
+      console.error('Error updating admin avatar URL:', error);
       return res.status(500).json({
         message: 'Database error: Unable to update avatar URL'
       });
     }
 
-    console.log(`✅ Admin (ID: ${adminId}) avatar updated to: ${newAvatarUrl}`);
+    console.log(`Admin (ID: ${adminId}) avatar updated to: ${newAvatarUrl}`);
     return res.status(200).json({
       message: 'Admin avatar updated successfully.',
       avatarUrl: newAvatarUrl,
     });
   } catch (err) {
-    console.error('❌ Error in uploadAdminAvatar:', err);
+    console.error('Error in uploadAdminAvatar:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 };
 
+/**
+ * Sign Out Admin
+ */
 export const signOutAdmin = async (req, res) => {
   try {
     // If using sessions or token storage, remove/expire them here.
     // For demonstration, we'll just return success:
     return res.status(200).json({ message: 'Admin signed out successfully.' });
   } catch (error) {
-    console.error('❌ Error signing out admin:', error);
+    console.error('Error signing out admin:', error);
     return res.status(500).json({ message: 'Internal server error.' });
+  }
+};
+
+/**
+ * Get All Admins
+ * (Uses getAllAdmins() from adminModel.js)
+ */
+export const getAllAdminsController = async (req, res) => {
+  try {
+    const { data, error } = await getAllAdmins();
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error fetching admins',
+        error,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      admins: data,
+    });
+  } catch (err) {
+    console.error('[getAllAdminsController] Unexpected error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
