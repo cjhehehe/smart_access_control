@@ -11,8 +11,6 @@ export const saveMacAddress = async ({ guest_id, rfid_uid, mac, ip, status }) =>
       ip,
       status: status || 'pending',
     };
-
-    // Optionally link to a guest or RFID
     if (guest_id) payload.guest_id = guest_id;
     if (rfid_uid) payload.rfid_uid = rfid_uid;
 
@@ -22,10 +20,13 @@ export const saveMacAddress = async ({ guest_id, rfid_uid, mac, ip, status }) =>
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error saving MAC:', error);
+      return { data: null, error };
+    }
     return { data, error: null };
   } catch (err) {
-    console.error('Error saving MAC:', err);
+    console.error('Unexpected error in saveMacAddress:', err);
     return { data: null, error: err };
   }
 };
@@ -40,10 +41,13 @@ export const getWhitelistedMacs = async () => {
       .select('mac')
       .eq('status', 'connected'); // or 'whitelisted'
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching whitelisted MACs:', error);
+      return { data: null, error };
+    }
     return { data, error: null };
   } catch (err) {
-    console.error('Error fetching whitelisted MACs:', err);
+    console.error('Unexpected error in getWhitelistedMacs:', err);
     return { data: null, error: err };
   }
 };
@@ -60,13 +64,16 @@ export const updateMacStatus = async (mac, status) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error updating MAC status:', error);
+      return { data: null, error };
+    }
     if (!data) {
       return { data: null, error: 'MAC not found or no rows updated' };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Error updating MAC status:', err);
+    console.error('Unexpected error in updateMacStatus:', err);
     return { data: null, error: err };
   }
 };

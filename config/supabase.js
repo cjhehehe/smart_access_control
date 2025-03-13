@@ -22,14 +22,12 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
-// Polyfill global fetch if not already available
-if (!globalThis.fetch) {
-  globalThis.fetch = fetch;
-}
+// Always override the global fetch with node‑fetch
+globalThis.fetch = fetch;
 
-console.log("\nSupabase client initialized successfully!");
+console.log("Supabase client initialized successfully!");
 
-// Explicitly pass fetch to the Supabase client options
+// Pass the fetch function explicitly to the client options
 const supabase = createClient(supabaseUrl, supabaseKey, { fetch: globalThis.fetch });
 
 export default supabase;
