@@ -169,3 +169,4 @@ export const unassignRFID = async (rfid_uid) => {
     return { data: null, error: err };
   }
 };
+  
