@@ -1,15 +1,36 @@
+// routes/rfidRoutes.js
 import express from 'express';
-import { assignRFID, getAvailableRFIDTags, verifyRFID } from '../controllers/rfidController.js';
+import {
+  getAllRFIDTags,
+  getAvailableRFIDTags,
+  assignRFID,
+  activateRFIDTag,
+  markRFIDAsLost,
+  unassignRFIDTag,
+  verifyRFID,
+} from '../controllers/rfidController.js';
 
 const router = express.Router();
 
-// Route to assign an RFID to a guest
-router.post('/assign', assignRFID);
+// Admin usage: fetch all tags
+router.get('/all', getAllRFIDTags);
 
-// Route to get available (unassigned) RFID tags
+// Guest usage: fetch only 'available' tags
 router.get('/available', getAvailableRFIDTags);
 
-// ✅ NEW: Route to verify if an RFID is valid
+// Assign a card (status -> 'assigned')
+router.post('/assign', assignRFID);
+
+// Activate a card (status -> 'active')
+router.post('/activate', activateRFIDTag);
+
+// Mark as lost (status -> 'lost')
+router.post('/lost', markRFIDAsLost);
+
+// Unassign (status -> 'available')
+router.post('/unassign', unassignRFIDTag);
+
+// Verify (check if it's valid/active)
 router.post('/verify', verifyRFID);
 
 export default router;

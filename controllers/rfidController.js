@@ -1,108 +1,296 @@
-import supabase from '../config/supabase.js';
-import { findRFIDByUID, assignRFIDToGuest, getAvailableRFIDs } from '../models/rfidModel.js';
-import { findUserById } from '../models/userModel.js';
-
-/**
- * ✅ Verify RFID Tag
- */
-export const verifyRFID = async (req, res) => {
+// controllers/rfidController.js
+import {
+    findRFIDByUID,
+    getAllRFIDs,
+    getAvailableRFIDs,
+    assignRFIDToGuest,
+    activateRFID,
+    markRFIDLost,
+    unassignRFID,
+  } from '../models/rfidModel.js';
+  import { findUserById } from '../models/userModel.js';
+  
+  /**
+   * GET all RFID tags (admin usage).
+   */
+  export const getAllRFIDTags = async (req, res) => {
     try {
-        const { rfid_uid } = req.body;
-
-        if (!rfid_uid) {
-            return res.status(400).json({ success: false, message: 'RFID UID is required' });
-        }
-
-        // Check if RFID exists in the database
-        const { data: rfidData } = await findRFIDByUID(rfid_uid);
-
-        if (!rfidData) {
-            return res.status(404).json({ success: false, message: 'RFID not found' });
-        }
-
-        // Check if RFID is assigned to a guest
-        if (!rfidData.assigned_to) {
-            return res.status(403).json({ success: false, message: 'RFID is not assigned to any guest' });
-        }
-
-        // Fetch guest details
-        const { data: guestData } = await findUserById(rfidData.assigned_to);
-
-        if (!guestData) {
-            return res.status(404).json({ success: false, message: 'Guest not found' });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'RFID verified successfully',
-            data: {
-                rfid_uid: rfidData.rfid_uid,
-                guest: guestData
-            }
+      const { data, error } = await getAllRFIDs();
+      if (error) {
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to fetch all RFID tags',
         });
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'All RFID tags fetched successfully',
+        data,
+      });
     } catch (error) {
-        console.error('Error verifying RFID:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+      console.error('Error in getAllRFIDTags:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
-};
-
-/**
- * ✅ Assign an RFID tag to a guest
- */
-export const assignRFID = async (req, res) => {
+  };
+  
+  /**
+   * GET available RFID tags (status = 'available').
+   */
+  export const getAvailableRFIDTags = async (req, res) => {
     try {
-        const { guest_id, rfid_tag } = req.body;
-
-        if (!guest_id || !rfid_tag) {
-            return res.status(400).json({ success: false, message: 'Guest ID and RFID UID are required' });
-        }
-
-        // Check if the guest exists
-        const { data: guest } = await findUserById(guest_id);
-        if (!guest) {
-            return res.status(404).json({ success: false, message: 'Guest not found' });
-        }
-
-        // Check if RFID exists
-        const { data: existingRFID } = await findRFIDByUID(rfid_tag);
-        if (!existingRFID) {
-            return res.status(404).json({ success: false, message: 'RFID not found' });
-        }
-
-        if (existingRFID.assigned_to) {
-            return res.status(400).json({ success: false, message: 'RFID is already assigned to another guest' });
-        }
-
-        // Assign RFID
-        const { data, error } = await assignRFIDToGuest(rfid_tag, guest_id);
-
-        if (error) {
-            console.error('Database error:', error);
-            return res.status(500).json({ success: false, message: 'Database error: Unable to assign RFID' });
-        }
-
-        res.status(201).json({ success: true, message: 'RFID assigned to guest successfully', data });
+      const { data, error } = await getAvailableRFIDs();
+      if (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to fetch available RFID tags',
+        });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: 'Available RFID tags fetched successfully',
+        data,
+      });
     } catch (error) {
-        console.error('Unexpected Error:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+      console.error('Unexpected Error:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
-};
-
-/**
- * ✅ Fetch available RFID tags
- */
-export const getAvailableRFIDTags = async (req, res) => {
+  };
+  
+  /**
+   * POST /api/rfid/assign
+   * Assign an RFID card to a guest (status -> 'assigned').
+   */
+  export const assignRFID = async (req, res) => {
     try {
-        const { data, error } = await getAvailableRFIDs();
-
-        if (error) {
-            console.error('Database error:', error);
-            return res.status(500).json({ success: false, message: 'Database error: Unable to fetch RFID tags' });
-        }
-
-        res.status(200).json({ success: true, message: 'Available RFID tags fetched successfully', data });
+      const { guest_id, rfid_tag, guest_name } = req.body;
+      if (!guest_id || !rfid_tag) {
+        return res.status(400).json({
+          success: false,
+          message: 'Guest ID and RFID UID are required.',
+        });
+      }
+  
+      // Check if the guest actually exists
+      const { data: guestData, error: guestError } = await findUserById(guest_id);
+      if (guestError) {
+        console.error('Error finding guest:', guestError);
+        return res.status(500).json({ success: false, message: 'Error fetching guest' });
+      }
+      if (!guestData) {
+        return res.status(404).json({ success: false, message: 'Guest not found' });
+      }
+  
+      // Attempt assignment (must be status = 'available')
+      const { data, error } = await assignRFIDToGuest(
+        rfid_tag,
+        guest_id,
+        guest_name || guestData.name
+      );
+      if (error) {
+        console.error('Database error:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to assign RFID',
+        });
+      }
+  
+      if (!data) {
+        // Means the card was not 'available' or didn't match rfid_uid
+        return res.status(400).json({
+          success: false,
+          message: 'RFID is not in an available state or does not exist.',
+        });
+      }
+  
+      // If success
+      return res.status(201).json({
+        success: true,
+        message: 'RFID assigned to guest successfully (status: assigned)',
+        data,
+      });
     } catch (error) {
-        console.error('Unexpected Error:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+      console.error('Unexpected Error in assignRFID:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
     }
-};
+  };
+  
+  /**
+   * POST /api/rfid/activate
+   * Activate an RFID card (status -> 'active'), must be 'assigned' first.
+   */
+  export const activateRFIDTag = async (req, res) => {
+    try {
+      const { rfid_uid } = req.body;
+      if (!rfid_uid) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'rfid_uid is required.' });
+      }
+  
+      const { data, error } = await activateRFID(rfid_uid);
+      if (error) {
+        console.error('Error activating RFID:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to activate RFID',
+        });
+      }
+      if (!data) {
+        // Means it wasn't in 'assigned' status or doesn't exist
+        return res.status(400).json({
+          success: false,
+          message: 'RFID not found or not in assigned status.',
+        });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: 'RFID activated successfully (status: active)',
+        data,
+      });
+    } catch (error) {
+      console.error('Error in activateRFIDTag:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  };
+  
+  /**
+   * POST /api/rfid/lost
+   * Mark RFID as lost (status -> 'lost').
+   */
+  export const markRFIDAsLost = async (req, res) => {
+    try {
+      const { rfid_uid } = req.body;
+      if (!rfid_uid) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'rfid_uid is required.' });
+      }
+  
+      const { data, error } = await markRFIDLost(rfid_uid);
+      if (error) {
+        console.error('Error marking RFID lost:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to mark RFID as lost',
+        });
+      }
+      if (!data) {
+        // Means it wasn't found or was already lost
+        return res.status(400).json({
+          success: false,
+          message: 'RFID not found or already lost.',
+        });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: 'RFID status changed to lost',
+        data,
+      });
+    } catch (error) {
+      console.error('Error in markRFIDAsLost:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  };
+  
+  /**
+   * POST /api/rfid/unassign
+   * Unassign RFID (status -> 'available').
+   */
+  export const unassignRFIDTag = async (req, res) => {
+    try {
+      const { rfid_uid } = req.body;
+      if (!rfid_uid) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'rfid_uid is required.' });
+      }
+  
+      const { data, error } = await unassignRFID(rfid_uid);
+      if (error) {
+        console.error('Error unassigning RFID:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to unassign RFID',
+        });
+      }
+      if (!data) {
+        // Means card wasn't found or was already available
+        return res.status(400).json({
+          success: false,
+          message: 'RFID not found or already available.',
+        });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: 'RFID unassigned successfully (status: available)',
+        data,
+      });
+    } catch (error) {
+      console.error('Error in unassignRFIDTag:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  };
+  
+  /**
+   * POST /api/rfid/verify
+   * Check if an RFID card is valid and possibly if it's active.
+   */
+  export const verifyRFID = async (req, res) => {
+    try {
+      const { rfid_uid } = req.body;
+      if (!rfid_uid) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'RFID UID is required.' });
+      }
+  
+      const { data: rfidData, error } = await findRFIDByUID(rfid_uid);
+      if (error) {
+        return res.status(500).json({ success: false, message: 'Error finding RFID.' });
+      }
+      if (!rfidData) {
+        return res.status(404).json({ success: false, message: 'RFID not found.' });
+      }
+  
+      // Optionally ensure it's 'active' or 'assigned'
+      // For example:
+      if (rfidData.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          message: `RFID is found but not active (status: ${rfidData.status}).`,
+        });
+      }
+  
+      // If it references a guest, check that guest
+      if (!rfidData.guest_id) {
+        return res.status(403).json({
+          success: false,
+          message: 'RFID is not assigned to any guest.',
+        });
+      }
+  
+      // Optionally fetch the guest
+      const { data: guestData } = await findUserById(rfidData.guest_id);
+      if (!guestData) {
+        return res.status(404).json({ success: false, message: 'Guest not found.' });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: 'RFID verified successfully.',
+        data: {
+          rfid: rfidData,
+          guest: guestData,
+        },
+      });
+    } catch (error) {
+      console.error('Error verifying RFID:', error);
+      return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  };
+  
