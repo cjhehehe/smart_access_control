@@ -225,15 +225,18 @@ export const unassignRFIDTag = async (req, res) => {
  * Verify an RFID for door access:
  * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
- * - The guest must have reserved room 101 (only that guest is allowed access)
+ * - The guest must have reserved a room (room number provided in req.body)
  * - If the room is 'reserved', automatically set it to 'occupied'
- *   and compute check_in/check_out times using hours_stay in hours.
+ *   and compute check_in/check_out times using hours_stay (in hours).
  */
 export const verifyRFID = async (req, res) => {
   try {
-    const { rfid_uid } = req.body;
+    const { rfid_uid, room_number } = req.body;
     if (!rfid_uid) {
       return res.status(400).json({ success: false, message: 'RFID UID is required.' });
+    }
+    if (!room_number) {
+      return res.status(400).json({ success: false, message: 'Room number is required for verification.' });
     }
 
     // 1) Look up the RFID record
@@ -266,8 +269,8 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Guest not found.' });
     }
 
-    // 4) Ensure the guest has reserved room number 101
-    let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, '101');
+    // 4) Ensure the guest has reserved the provided room number
+    let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, room_number);
     if (roomError) {
       console.error('Error checking room reservation:', roomError);
       return res.status(500).json({
@@ -278,7 +281,7 @@ export const verifyRFID = async (req, res) => {
     if (!roomData) {
       return res.status(403).json({
         success: false,
-        message: 'Access denied: Guest has not reserved room 101.',
+        message: `Access denied: Guest has not reserved room ${room_number}.`,
       });
     }
 
@@ -297,19 +300,19 @@ export const verifyRFID = async (req, res) => {
 
     // 6) If the room is 'reserved', set it to 'occupied'
     //    and set check_in/check_out times automatically.
-    //    Use parseFloat for partial hours.
     if (roomData.status === 'reserved') {
       const rawHours = roomData.hours_stay;
-      const hoursStay = rawHours ? parseFloat(rawHours) : 0;
-      if (isNaN(hoursStay) || hoursStay < 0) {
-        console.warn(`Invalid hours_stay value: ${rawHours}. Defaulting to 0.`);
+      let hoursStay = rawHours ? parseFloat(rawHours) : 0;
+      // If hoursStay is invalid or zero, default to 1 hour (adjust as needed)
+      if (isNaN(hoursStay) || hoursStay <= 0) {
+        console.warn(`Invalid hours_stay value: ${rawHours}. Defaulting to 1 hour.`);
+        hoursStay = 1;
       }
 
       const checkInTime = new Date();
-      // Add hoursStay hours to the checkInTime
       const checkOutTime = new Date(checkInTime.getTime() + (hoursStay * 60 * 60 * 1000));
 
-      // Perform the update inline using supabase:
+      // Update room status to 'occupied' with proper check_in/check_out times
       const { data: occupiedRoom, error: checkInError } = await supabase
         .from('rooms')
         .update({
@@ -330,7 +333,6 @@ export const verifyRFID = async (req, res) => {
 
       roomData = occupiedRoom;
     } else {
-      // If it's already 'occupied' or 'available', log it
       console.log(`[verifyRFID] Room ${roomData.room_number} is currently '${roomData.status}' (no update).`);
     }
 

@@ -54,7 +54,6 @@ export function startCronJobs() {
       }
 
       // B) If current time >= check_out => auto-check-out
-      //    i.e. diffMinutes <= 0 means time is up
       if (diffMinutes <= 0) {
         await autoCheckOutRoom(room);
       }

@@ -202,13 +202,13 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 
 /**
  * Check-Out a guest from a room by ID.
- * Updates the room status to 'vacant' and sets the check_out time.
+ * Updates the room status to 'available' and sets the check_out time.
  */
 export const checkOutRoom = async (roomId, checkOutTime = new Date().toISOString()) => {
   try {
     const { data, error } = await supabase
       .from('rooms')
-      .update({ check_out: checkOutTime, status: 'vacant' })
+      .update({ check_out: checkOutTime, status: 'available' })
       .eq('id', roomId)
       .single();
     if (error) {

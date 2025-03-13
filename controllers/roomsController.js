@@ -14,7 +14,8 @@ import {
 
 /**
  * POST /api/rooms
- * Create a new room record (status='reserved').
+ * Create a new room record (initial status = 'reserved').
+ * Use this endpoint when creating a reservation.
  */
 export const addRoom = async (req, res) => {
   try {
@@ -59,7 +60,7 @@ export const addRoom = async (req, res) => {
       guest_id,
       guest_name: guest_name || null,
       room_number: room_number.toString(),
-      hours_stay: numericHoursStay, // store as float -> numeric column
+      hours_stay: numericHoursStay, // stored as a numeric value
       status: 'reserved',
       registration_time: new Date().toISOString(),
     };
@@ -87,7 +88,8 @@ export const addRoom = async (req, res) => {
 
 /**
  * PUT /api/rooms/assign
- * Assign (reserve) a room by room_number (status='reserved').
+ * Assign (reserve) a room by room_number (status -> 'reserved').
+ * Only updates if the room is currently 'available'.
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -116,7 +118,7 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
-    // Only update if the room is available
+    // Only update if the room is available (i.e. not reserved, occupied, or under maintenance)
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
@@ -244,6 +246,7 @@ export const removeRoom = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkin
  * Check a guest into a room (manual usage).
+ * Sets check_in time and updates status to 'occupied'.
  */
 export const roomCheckIn = async (req, res) => {
   try {
@@ -265,6 +268,7 @@ export const roomCheckIn = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkout
  * Check a guest out from a room (manual usage).
+ * Sets check_out time and updates status to 'available'.
  */
 export const roomCheckOut = async (req, res) => {
   try {
