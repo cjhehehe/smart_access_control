@@ -10,8 +10,8 @@ import { getAllAdmins } from './models/adminModel.js';
  * startCronJobs()
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
- *  3) If current time is 10 minutes before check_out, sends a "stay ending soon" notification.
- *  4) If current time is within ±1 minute of check_out, auto-checks out the room.
+ *  3) If exactly 10 minutes before check_out, sends "stay ending soon" notification.
+ *  4) If now >= check_out time, auto-checks out the room.
  */
 export function startCronJobs() {
   // Runs every minute
@@ -42,8 +42,8 @@ export function startCronJobs() {
       }
 
       const checkOutTime = new Date(room.check_out);
-      const diffMs = checkOutTime.getTime() - now.getTime();
-      const diffMinutes = diffMs / (1000 * 60);  // float value for precision
+      const diffMs = checkOutTime - now;
+      const diffMinutes = diffMs / (1000 * 60);
 
       // Log for debugging
       console.log(
@@ -52,12 +52,13 @@ export function startCronJobs() {
       );
 
       // A) If exactly 10 minutes before check_out, send "stay ending soon" notification.
-      if (Math.abs(diffMinutes - 10) < 0.5) {  // tolerance of 30 seconds
+      //    We'll allow a small tolerance if you want (±30s). Otherwise, exact matching:
+      if (Math.abs(diffMinutes - 10) < 0.5) {
         await sendStayEndingNotification(room);
       }
 
-      // B) If current time is within ±1 minute of check_out, auto-check-out the room.
-      if (diffMinutes >= -1 && diffMinutes <= 1) {
+      // B) If the current time >= check_out, auto-check-out the room.
+      if (now >= checkOutTime) {
         await autoCheckOutRoom(room);
       }
     }
@@ -105,16 +106,17 @@ async function sendStayEndingNotification(room) {
 }
 
 /**
- * Automatically check-out a room if the current time is within ±1 minute of check_out.
- * Updates room record, resets RFID, and sends notifications.
+ * Auto-check-out a room if current time >= check_out.
+ * - Clears guest_id, hours_stay, check_in, check_out
+ * - Sets status to 'available'
+ * - Resets RFID(s) for the guest
+ * - Sends notifications to guest & admins
  */
 async function autoCheckOutRoom(room) {
   try {
     console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
 
-    // Update the room record:
-    // - Clear guest_id, hours_stay, check_in, check_out
-    // - Set status to 'available'
+    // Update the room record
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
       .update({
