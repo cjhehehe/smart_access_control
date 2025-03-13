@@ -10,15 +10,14 @@ import { getAllAdmins } from './models/adminModel.js';
  * startCronJobs()
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
- *  3) If exactly 10 minutes before check_out, sends "stay ending soon" notification.
- *  4) If now >= check_out time, auto-checks out the room.
+ *  3) If exactly 10 minutes before check_out, sends "stay ending soon" notifications.
+ *  4) If now >= check_out, auto-checks out the room.
  */
 export function startCronJobs() {
-  // Runs every minute
   cron.schedule('* * * * *', async () => {
     console.log('[CRON] Running check for expiring stays...');
 
-    // 1) Fetch all occupied rooms
+    // 1) Fetch all occupied rooms.
     const { data: occupiedRooms, error } = await supabase
       .from('rooms')
       .select('*')
@@ -29,35 +28,29 @@ export function startCronJobs() {
       return;
     }
     if (!occupiedRooms || occupiedRooms.length === 0) {
-      return; // No occupied rooms to check
+      return; // Nothing to do.
     }
 
     const now = new Date();
-
     for (const room of occupiedRooms) {
-      // If no check_out is set, skip
       if (!room.check_out) {
         console.log(`[CRON] Room ${room.room_number} has no check_out time. Skipping...`);
         continue;
       }
 
       const checkOutTime = new Date(room.check_out);
-      const diffMs = checkOutTime - now;
-      const diffMinutes = diffMs / (1000 * 60);
+      const diffMinutes = (checkOutTime - now) / (1000 * 60);
 
-      // Log for debugging
       console.log(
-        `[CRON] Room ${room.room_number} -> diffMinutes=${diffMinutes.toFixed(2)}, ` +
-        `check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
+        `[CRON] Room ${room.room_number} -> diffMinutes=${diffMinutes.toFixed(2)}, check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
       );
 
-      // A) If exactly 10 minutes before check_out, send "stay ending soon" notification.
-      //    We'll allow a small tolerance if you want (±30s). Otherwise, exact matching:
+      // A) Send "Stay Ending Soon" notifications when diff is within ±30 seconds of 10 minutes.
       if (Math.abs(diffMinutes - 10) < 0.5) {
         await sendStayEndingNotification(room);
       }
 
-      // B) If the current time >= check_out, auto-check-out the room.
+      // B) Auto-checkout if current time is at or past the check_out time.
       if (now >= checkOutTime) {
         await autoCheckOutRoom(room);
       }
@@ -66,7 +59,7 @@ export function startCronJobs() {
 }
 
 /**
- * Send a "stay ending soon" notification to the guest and all admins.
+ * Send a "Stay Ending Soon" notification to the guest and all admins.
  */
 async function sendStayEndingNotification(room) {
   try {
@@ -75,7 +68,6 @@ async function sendStayEndingNotification(room) {
       return;
     }
 
-    // Notify the guest
     await createNotification({
       recipient_guest_id: room.guest_id,
       title: 'Stay Ending Soon',
@@ -83,7 +75,6 @@ async function sendStayEndingNotification(room) {
       notification_type: 'stay_ending_soon',
     });
 
-    // Notify all admins
     const { data: admins, error: adminErr } = await getAllAdmins();
     if (adminErr || !admins) {
       console.error('[CRON] Error fetching admins for "stay ending soon":', adminErr);
@@ -98,7 +89,6 @@ async function sendStayEndingNotification(room) {
         notification_type: 'stay_ending_soon',
       });
     }
-
     console.log(`[CRON] Sent "stay ending soon" notifications for room ${room.room_number}`);
   } catch (err) {
     console.error('[CRON] Error sending stay ending notification:', err);
@@ -106,17 +96,14 @@ async function sendStayEndingNotification(room) {
 }
 
 /**
- * Auto-check-out a room if current time >= check_out.
- * - Clears guest_id, hours_stay, check_in, check_out
- * - Sets status to 'available'
- * - Resets RFID(s) for the guest
- * - Sends notifications to guest & admins
+ * Auto-checkout a room: updates room status to "available", clears guest data,
+ * resets the associated RFID, and sends notifications.
  */
 async function autoCheckOutRoom(room) {
   try {
     console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
 
-    // Update the room record
+    // 1) Update the room record.
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
       .update({
@@ -128,18 +115,17 @@ async function autoCheckOutRoom(room) {
       })
       .eq('id', room.id)
       .single();
-
     if (roomError) {
       console.error('[CRON] Error auto-checking out room:', roomError);
       return;
     }
 
-    // Reset RFID(s) for that guest (if applicable)
+    // 2) Reset any RFID associated with the guest.
     if (room.guest_id) {
       await resetRFIDByGuest(room.guest_id);
     }
 
-    // Notify the guest
+    // 3) Notify the guest.
     if (room.guest_id) {
       await createNotification({
         recipient_guest_id: room.guest_id,
@@ -149,7 +135,7 @@ async function autoCheckOutRoom(room) {
       });
     }
 
-    // Notify all admins
+    // 4) Notify all admins.
     const { data: admins, error: adminErr } = await getAllAdmins();
     if (adminErr || !admins) {
       console.error('[CRON] Error fetching admins for auto-checkout:', adminErr);
@@ -163,10 +149,7 @@ async function autoCheckOutRoom(room) {
         });
       }
     }
-
-    console.log(
-      `[CRON] Auto-checked out room ${room.room_number}, set to 'available' and cleared guest data.`
-    );
+    console.log(`[CRON] Auto-checked out room ${room.room_number}, cleared guest data.`);
   } catch (err) {
     console.error('[CRON] Error in autoCheckOutRoom:', err);
   }
