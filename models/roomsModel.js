@@ -130,7 +130,11 @@ export const updateRoom = async (roomId, updateFields) => {
  * Update an existing room record by room_number.
  * If onlyIfAvailable=true, restrict to rooms with status 'available'.
  */
-export const updateRoomByNumber = async (roomNumber, updateFields, { onlyIfAvailable = false } = {}) => {
+export const updateRoomByNumber = async (
+  roomNumber,
+  updateFields,
+  { onlyIfAvailable = false } = {}
+) => {
   try {
     let query = supabase
       .from('rooms')

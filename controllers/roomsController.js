@@ -14,21 +14,30 @@ import {
 
 /**
  * POST /api/rooms
- * Create a new room record.
- * When a guest reserves a room, the room's status is set to 'reserved'.
- * (Room 101 should be reserved only once.)
+ * Create a new room record (status='reserved').
  */
 export const addRoom = async (req, res) => {
   try {
     const { guest_id, guest_name, room_number, hours_stay } = req.body;
-    if (!guest_id || !room_number || !hours_stay) {
+
+    // Basic checks
+    if (!guest_id || !room_number || hours_stay == null) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: guest_id, room_number, hours_stay.',
       });
     }
 
-    // Check if this room_number already exists – ensuring room 101 (or any room) is reserved only once.
+    // Parse hours_stay as float
+    const numericHoursStay = parseFloat(hours_stay);
+    if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid hours_stay. Must be a positive decimal.',
+      });
+    }
+
+    // Check if this room_number already exists
     const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
     if (findError) {
       console.error('Error checking existing room:', findError);
@@ -45,12 +54,12 @@ export const addRoom = async (req, res) => {
       });
     }
 
-    // Prepare new room data; guest reservation sets status to 'reserved'
+    // Prepare new room data
     const newRoom = {
       guest_id,
       guest_name: guest_name || null,
       room_number: room_number.toString(),
-      hours_stay,
+      hours_stay: numericHoursStay, // store as float -> numeric column
       status: 'reserved',
       registration_time: new Date().toISOString(),
     };
@@ -78,23 +87,31 @@ export const addRoom = async (req, res) => {
 
 /**
  * PUT /api/rooms/assign
- * Assign (reserve) a room by room_number.
- * The room must be available. Once reserved, room 101 cannot be reserved again.
+ * Assign (reserve) a room by room_number (status='reserved').
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
     const { room_number, guest_id, guest_name, hours_stay } = req.body;
-    if (!room_number || !guest_id || !hours_stay) {
+    if (!room_number || !guest_id || hours_stay == null) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: room_number, guest_id, hours_stay.',
       });
     }
 
+    // Parse hours_stay as float
+    const numericHoursStay = parseFloat(hours_stay);
+    if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid hours_stay. Must be a positive decimal.',
+      });
+    }
+
     const updateFields = {
       guest_id,
       guest_name: guest_name || null,
-      hours_stay,
+      hours_stay: numericHoursStay,
       status: 'reserved',
       registration_time: new Date().toISOString(),
     };
@@ -181,6 +198,18 @@ export const modifyRoom = async (req, res) => {
     if (!updateFields || Object.keys(updateFields).length === 0) {
       return res.status(400).json({ success: false, message: 'No update fields provided.' });
     }
+    // If hours_stay is present, parse it
+    if (updateFields.hours_stay != null) {
+      const numericHoursStay = parseFloat(updateFields.hours_stay);
+      if (isNaN(numericHoursStay) || numericHoursStay <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid hours_stay. Must be a positive decimal.',
+        });
+      }
+      updateFields.hours_stay = numericHoursStay;
+    }
+
     const { data, error } = await updateRoom(id, updateFields);
     if (error) {
       console.error('Error updating room data:', error);
