@@ -11,7 +11,7 @@ import { getAllAdmins } from './models/adminModel.js';
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
  *  3) If current time is near check_out time (exactly 10 min left) -> "stay ending soon" notification.
- *  4) If current time >= check_out time -> auto-check-out the guest.
+ *  4) If current time >= check_out time (with a 5 min buffer) -> auto-check-out the guest.
  */
 export function startCronJobs() {
   // The cron expression "* * * * *" => runs every minute
@@ -48,7 +48,7 @@ export function startCronJobs() {
       // Log for debugging
       console.log(
         `[CRON] Room ${room.room_number} -> diffMinutes=${diffMinutes}, ` +
-        `check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
+          `check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
       );
 
       // A) If exactly 10 minutes from check_out, send "stay ending soon" notification
@@ -57,18 +57,18 @@ export function startCronJobs() {
       }
 
       // B) If current time >= check_out => auto-check-out
-      //    BUT add a small buffer (e.g. 5 min) in case of minor clock offsets or rounding
+      //    Add a small buffer (e.g. 5 min) to allow minor clock offsets
       if (diffMinutes <= 0) {
-        // If it's slightly behind but within a small grace period, skip this cycle
-        // Adjust the buffer (in minutes) to your preference
+        // If it's slightly behind but within a 5-minute grace period, skip this cycle
         if (diffMinutes > -5) {
           console.log(
-            `[CRON] Room ${room.room_number} is past check_out, but within the 5-minute buffer. Skipping auto-check-out this cycle.`
+            `[CRON] Room ${room.room_number} is past check_out, but within the 5-minute buffer. ` +
+              'Skipping auto-check-out this cycle.'
           );
           continue;
         }
 
-        // If it's more than 5 minutes overdue, proceed with auto-check-out
+        // More than 5 minutes overdue, proceed with auto-check-out
         await autoCheckOutRoom(room);
       }
     }
@@ -120,18 +120,19 @@ async function sendStayEndingNotification(room) {
  *  - room.status -> 'available'
  *  - check_in -> null
  *  - check_out -> null
- *  - hours_stay -> null (removing it as requested)
+ *  - hours_stay -> null
  *  - guest_id -> null
- *  - guest_name -> null
  *  - RFID(s) for that guest -> 'available'
  *  - Notifications for both guest & all admins
+ *
+ *  (Removed `guest_name` references because it no longer exists in the rooms table.)
  */
 async function autoCheckOutRoom(room) {
   try {
     console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
 
     // 1) Update the room record
-    //    - Clear out the guest_id, guest_name, hours_stay
+    //    - Clear out the guest_id, hours_stay
     //    - Set status back to 'available', check_in & check_out to null
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
@@ -139,9 +140,9 @@ async function autoCheckOutRoom(room) {
         status: 'available',
         check_in: null,
         check_out: null,
-        hours_stay: null,  // remove hours_stay on check-out
+        hours_stay: null,
         guest_id: null,
-        guest_name: null,
+        // Remove guest_name or any column that doesn't exist in your DB
       })
       .eq('id', room.id)
       .single();
@@ -156,7 +157,7 @@ async function autoCheckOutRoom(room) {
       await resetRFIDByGuest(room.guest_id);
     }
 
-    // 3) Notify the guest
+    // 3) Notify the guest (if there was one assigned)
     if (room.guest_id) {
       await createNotification({
         recipient_guest_id: room.guest_id,
