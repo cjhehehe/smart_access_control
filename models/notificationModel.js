@@ -1,5 +1,7 @@
 // models/notificationModel.js
+
 import supabase from '../config/supabase.js';
+import { DateTime } from 'luxon';
 
 /**
  * Create a new notification
@@ -8,7 +10,7 @@ import supabase from '../config/supabase.js';
  *  - recipient_admin_id (int, optional)
  *  - title (string, required)
  *  - message (string, required)
- *  - note_message (string, optional)  <-- NEW
+ *  - note_message (string, optional)
  *  - notification_type (string, optional)
  *  - is_read (bool, optional; default = false)
  */
@@ -19,6 +21,11 @@ export const createNotification = async (notifData) => {
       notifData.is_read = false;
     }
 
+    // Generate local Asia/Manila time in "YYYY-MM-DD HH:mm:ss" format
+    const localManilaTime = DateTime.now()
+      .setZone('Asia/Manila')
+      .toFormat('yyyy-MM-dd HH:mm:ss');
+
     // Insert into 'notifications' table
     const { data, error } = await supabase
       .from('notifications')
@@ -28,10 +35,10 @@ export const createNotification = async (notifData) => {
           recipient_admin_id: notifData.recipient_admin_id ?? null,
           title: notifData.title,
           message: notifData.message,
-          note_message: notifData.note_message ?? null, // <-- Insert the new column
+          note_message: notifData.note_message ?? null, // Insert the new column
           notification_type: notifData.notification_type ?? null,
           is_read: notifData.is_read,
-          created_at: new Date().toISOString(),
+          created_at: localManilaTime, // Local time string (Asia/Manila)
         },
       ])
       .select('*')
