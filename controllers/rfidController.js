@@ -10,10 +10,9 @@ import {
   unassignRFID,
 } from '../models/rfidModel.js';
 import { findUserById } from '../models/userModel.js';
-import supabase from '../config/supabase.js'; // <--- Import Supabase directly if you want inline update
+import supabase from '../config/supabase.js'; 
 import {
   findRoomByGuestAndNumber,
-  // checkInRoom,  // Optionally import if you prefer a helper function
 } from '../models/roomsModel.js';
 
 /**
@@ -76,6 +75,7 @@ export const assignRFID = async (req, res) => {
         message: 'Guest ID and RFID UID are required.',
       });
     }
+
     const { data: guestData, error: guestError } = await findUserById(guest_id);
     if (guestError) {
       console.error('Error finding guest:', guestError);
@@ -84,6 +84,7 @@ export const assignRFID = async (req, res) => {
     if (!guestData) {
       return res.status(404).json({ success: false, message: 'Guest not found' });
     }
+
     const { data, error } = await assignRFIDToGuest(
       rfid_tag,
       guest_id,
@@ -102,6 +103,7 @@ export const assignRFID = async (req, res) => {
         message: 'RFID is not in an available state or does not exist.',
       });
     }
+
     return res.status(201).json({
       success: true,
       message: 'RFID assigned to guest successfully (status: assigned)',
@@ -224,8 +226,8 @@ export const unassignRFIDTag = async (req, res) => {
  * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
  * - The guest must have reserved room 101 (only that guest is allowed access)
- * - If the room is still 'reserved', automatically set it to 'occupied'
- *   and compute check_in/check_out times.
+ * - If the room is 'reserved', automatically set it to 'occupied'
+ *   and compute check_in/check_out times using hours_stay in hours.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -237,6 +239,7 @@ export const verifyRFID = async (req, res) => {
     // 1) Look up the RFID record
     let { data: rfidData, error } = await findRFIDByUID(rfid_uid);
     if (error) {
+      console.error('Error finding RFID:', error);
       return res.status(500).json({ success: false, message: 'Error finding RFID.' });
     }
     if (!rfidData) {
@@ -266,6 +269,7 @@ export const verifyRFID = async (req, res) => {
     // 4) Ensure the guest has reserved room number 101
     let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, '101');
     if (roomError) {
+      console.error('Error checking room reservation:', roomError);
       return res.status(500).json({
         success: false,
         message: 'Error checking room reservation.',
@@ -293,12 +297,17 @@ export const verifyRFID = async (req, res) => {
 
     // 6) If the room is 'reserved', set it to 'occupied'
     //    and set check_in/check_out times automatically.
+    //    Use parseFloat for partial hours.
     if (roomData.status === 'reserved') {
-      // We'll compute checkInTime and checkOutTime based on hours_stay
-      const hoursStay = parseInt(roomData.hours_stay, 10) || 0;
+      const rawHours = roomData.hours_stay;
+      const hoursStay = rawHours ? parseFloat(rawHours) : 0;
+      if (isNaN(hoursStay) || hoursStay < 0) {
+        console.warn(`Invalid hours_stay value: ${rawHours}. Defaulting to 0.`);
+      }
+
       const checkInTime = new Date();
-      // Add hours_stay hours to the checkInTime
-      const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
+      // Add hoursStay hours to the checkInTime
+      const checkOutTime = new Date(checkInTime.getTime() + (hoursStay * 60 * 60 * 1000));
 
       // Perform the update inline using supabase:
       const { data: occupiedRoom, error: checkInError } = await supabase
@@ -320,6 +329,9 @@ export const verifyRFID = async (req, res) => {
       }
 
       roomData = occupiedRoom;
+    } else {
+      // If it's already 'occupied' or 'available', log it
+      console.log(`[verifyRFID] Room ${roomData.room_number} is currently '${roomData.status}' (no update).`);
     }
 
     // 7) Return the verified data
