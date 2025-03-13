@@ -16,6 +16,14 @@ import {
  * POST /api/rooms
  * Create a new room record (initial status = 'reserved').
  * Use this endpoint when creating a reservation.
+ * 
+ * Expects:
+ *  - guest_id (number)
+ *  - guest_name (string, optional)
+ *  - room_number (string or number)
+ *  - hours_stay (number)
+ *
+ * Stores registration_time in UTC (using new Date().toISOString()).
  */
 export const addRoom = async (req, res) => {
   try {
@@ -62,7 +70,7 @@ export const addRoom = async (req, res) => {
       room_number: room_number.toString(),
       hours_stay: numericHoursStay, // stored as a numeric value
       status: 'reserved',
-      registration_time: new Date().toISOString(),
+      registration_time: new Date().toISOString(), // UTC timestamp
     };
 
     const { data, error } = await createRoom(newRoom);
@@ -90,6 +98,14 @@ export const addRoom = async (req, res) => {
  * PUT /api/rooms/assign
  * Assign (reserve) a room by room_number (status -> 'reserved').
  * Only updates if the room is currently 'available'.
+ *
+ * Expects:
+ *  - room_number (string or number)
+ *  - guest_id (number)
+ *  - guest_name (string, optional)
+ *  - hours_stay (number)
+ *
+ * Sets registration_time to current UTC time.
  */
 export const assignRoomByNumber = async (req, res) => {
   try {
@@ -115,10 +131,10 @@ export const assignRoomByNumber = async (req, res) => {
       guest_name: guest_name || null,
       hours_stay: numericHoursStay,
       status: 'reserved',
-      registration_time: new Date().toISOString(),
+      registration_time: new Date().toISOString(), // UTC timestamp
     };
 
-    // Only update if the room is available (i.e. not reserved, occupied, or under maintenance)
+    // Only update if the room is available (i.e. not reserved, occupied, or maintenance)
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });
@@ -140,7 +156,7 @@ export const assignRoomByNumber = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Room updated successfully',
+      message: 'Room reserved (status=reserved) successfully',
       data,
     });
   } catch (error) {
@@ -151,7 +167,7 @@ export const assignRoomByNumber = async (req, res) => {
 
 /**
  * GET /api/rooms/:id
- * Get room details by room ID.
+ * Retrieve a single room by ID.
  */
 export const getRoom = async (req, res) => {
   try {
@@ -173,7 +189,7 @@ export const getRoom = async (req, res) => {
 
 /**
  * GET /api/rooms
- * Get all room records.
+ * Retrieve all room records.
  */
 export const getRooms = async (req, res) => {
   try {
@@ -191,7 +207,15 @@ export const getRooms = async (req, res) => {
 
 /**
  * PUT /api/rooms/:id
- * Update room details by room ID.
+ * Update specific fields of a room by its ID.
+ * 
+ * Example body:
+ *  {
+ *    "guest_name": "New Guest",
+ *    "hours_stay": 5
+ *  }
+ * 
+ * If hours_stay is provided, it must be a positive decimal.
  */
 export const modifyRoom = async (req, res) => {
   try {
@@ -200,6 +224,7 @@ export const modifyRoom = async (req, res) => {
     if (!updateFields || Object.keys(updateFields).length === 0) {
       return res.status(400).json({ success: false, message: 'No update fields provided.' });
     }
+
     // If hours_stay is present, parse it
     if (updateFields.hours_stay != null) {
       const numericHoursStay = parseFloat(updateFields.hours_stay);
@@ -217,7 +242,12 @@ export const modifyRoom = async (req, res) => {
       console.error('Error updating room data:', error);
       return res.status(500).json({ success: false, message: 'Error updating room data', error });
     }
-    return res.status(200).json({ success: true, message: 'Room updated successfully', data });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Room updated successfully',
+      data,
+    });
   } catch (error) {
     console.error('Unexpected error in modifyRoom:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error });
@@ -226,7 +256,7 @@ export const modifyRoom = async (req, res) => {
 
 /**
  * DELETE /api/rooms/:id
- * Delete a room record.
+ * Delete a room record by ID.
  */
 export const removeRoom = async (req, res) => {
   try {
@@ -246,13 +276,18 @@ export const removeRoom = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkin
  * Check a guest into a room (manual usage).
- * Sets check_in time and updates status to 'occupied'.
+ * Sets check_in time (UTC) and updates status to 'occupied'.
+ * 
+ * Body can include:
+ *  - check_in: override time in ISO string if needed
  */
 export const roomCheckIn = async (req, res) => {
   try {
     const { id } = req.params;
     const { check_in } = req.body;
+    // Use provided time if valid, else default to now in UTC
     const checkInTime = check_in || new Date().toISOString();
+
     const { data, error } = await checkInRoom(id, checkInTime);
     if (error) {
       console.error('Error during check-in:', error);
@@ -268,13 +303,18 @@ export const roomCheckIn = async (req, res) => {
 /**
  * POST /api/rooms/:id/checkout
  * Check a guest out from a room (manual usage).
- * Sets check_out time and updates status to 'available'.
+ * Sets check_out time (UTC) and updates status to 'available'.
+ * 
+ * Body can include:
+ *  - check_out: override time in ISO string if needed
  */
 export const roomCheckOut = async (req, res) => {
   try {
     const { id } = req.params;
     const { check_out } = req.body;
+    // Use provided time if valid, else default to now in UTC
     const checkOutTime = check_out || new Date().toISOString();
+
     const { data, error } = await checkOutRoom(id, checkOutTime);
     if (error) {
       console.error('Error during check-out:', error);

@@ -3,7 +3,7 @@
 import supabase from '../config/supabase.js';
 
 /**
- * Find an RFID by its UID.
+ * Find an RFID by its UID (rfid_uid).
  */
 export const findRFIDByUID = async (rfid_uid) => {
   try {
@@ -171,11 +171,10 @@ export const unassignRFID = async (rfid_uid) => {
 };
 
 /**
- * Reset all RFID tags for a specific guest (active/assigned -> available).
+ * Reset all RFID tags for a specific guest to 'available' if they are 'active' or 'assigned'.
  */
 export const resetRFIDByGuest = async (guest_id) => {
   try {
-    // Only reset RFID tags that are active or assigned
     const { data, error } = await supabase
       .from('rfid_tags')
       .update({

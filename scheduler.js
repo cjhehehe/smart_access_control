@@ -36,13 +36,16 @@ export function startCronJobs() {
 
     for (const room of occupiedRooms) {
       // If no check_out is set, skip
-      if (!room.check_out) continue;
+      if (!room.check_out) {
+        console.log(`[CRON] Room ${room.room_number} has no check_out time. Skipping...`);
+        continue;
+      }
 
       const checkOutTime = new Date(room.check_out);
-      const diffMs = checkOutTime - now;
+      const diffMs = checkOutTime.getTime() - now.getTime();
       const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-      // Log for debugging (optional)
+      // Log for debugging
       console.log(
         `[CRON] Room ${room.room_number} -> diffMinutes=${diffMinutes}, ` +
         `check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
@@ -66,7 +69,10 @@ export function startCronJobs() {
  */
 async function sendStayEndingNotification(room) {
   try {
-    if (!room.guest_id) return; // No guest assigned, skip
+    if (!room.guest_id) {
+      console.log(`[CRON] Room ${room.room_number} has no guest_id. Skipping notification.`);
+      return;
+    }
 
     // 1) Notify the guest
     await createNotification({
@@ -103,6 +109,8 @@ async function sendStayEndingNotification(room) {
  *  - room.status -> 'available'
  *  - check_in -> null
  *  - check_out -> null
+ *  - guest_id -> null
+ *  - guest_name -> null
  *  - RFID(s) for that guest -> 'available'
  *  - Notifications for both guest & all admins
  */
@@ -111,12 +119,16 @@ async function autoCheckOutRoom(room) {
     console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
 
     // 1) Update the room record
+    //    - Clear out the guest_id, guest_name
+    //    - Set status back to 'available', check_in & check_out to null
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
       .update({
         status: 'available',
         check_in: null,
         check_out: null,
+        guest_id: null,
+        guest_name: null,
       })
       .eq('id', room.id)
       .single();
@@ -156,7 +168,9 @@ async function autoCheckOutRoom(room) {
       }
     }
 
-    console.log(`[CRON] Auto-checked out room ${room.room_number}, set to 'available'.`);
+    console.log(
+      `[CRON] Auto-checked out room ${room.room_number}, set to 'available' and cleared guest data.`
+    );
   } catch (err) {
     console.error('[CRON] Error in autoCheckOutRoom:', err);
   }

@@ -3,7 +3,7 @@
 import supabase from '../config/supabase.js';
 
 /**
- * Create a new room record.
+ * Create a new room record in the 'rooms' table.
  */
 export const createRoom = async (roomData) => {
   try {
@@ -128,7 +128,7 @@ export const updateRoom = async (roomId, updateFields) => {
 
 /**
  * Update an existing room record by room_number.
- * If onlyIfAvailable=true, restrict to rooms with status 'available'.
+ * If onlyIfAvailable=true, restrict to rooms with status='available'.
  */
 export const updateRoomByNumber = async (
   roomNumber,
@@ -179,14 +179,17 @@ export const deleteRoom = async (roomId) => {
 };
 
 /**
- * Check-In a guest into a room by ID.
- * Updates the room status to 'occupied' and sets the check_in time.
+ * Check-In a guest into a room by ID (status='occupied').
+ * Sets check_in to the provided time (UTC) or now if none is given.
  */
 export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()) => {
   try {
     const { data, error } = await supabase
       .from('rooms')
-      .update({ check_in: checkInTime, status: 'occupied' })
+      .update({
+        check_in: checkInTime,
+        status: 'occupied',
+      })
       .eq('id', roomId)
       .single();
     if (error) {
@@ -201,14 +204,17 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 };
 
 /**
- * Check-Out a guest from a room by ID.
- * Updates the room status to 'available' and sets the check_out time.
+ * Check-Out a guest from a room by ID (status='available').
+ * Sets check_out to the provided time (UTC) or now if none is given.
  */
 export const checkOutRoom = async (roomId, checkOutTime = new Date().toISOString()) => {
   try {
     const { data, error } = await supabase
       .from('rooms')
-      .update({ check_out: checkOutTime, status: 'available' })
+      .update({
+        check_out: checkOutTime,
+        status: 'available',
+      })
       .eq('id', roomId)
       .single();
     if (error) {

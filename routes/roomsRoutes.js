@@ -1,4 +1,5 @@
 // routes/roomsRoutes.js
+
 import express from 'express';
 import {
   addRoom,
@@ -34,10 +35,10 @@ router.put('/:id', modifyRoom);
 // Delete a room record by ID
 router.delete('/:id', removeRoom);
 
-// Check-In endpoint: sets check_in time and status -> 'occupied'
+// Check-In endpoint: sets check_in time and status='occupied'
 router.post('/:id/checkin', roomCheckIn);
 
-// Check-Out endpoint: sets check_out time and status -> 'available'
+// Check-Out endpoint: sets check_out time and status='available'
 router.post('/:id/checkout', roomCheckOut);
 
 export default router;
