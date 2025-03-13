@@ -1,4 +1,5 @@
 // controllers/rfidController.js
+
 import {
   findRFIDByUID,
   getAllRFIDs,
@@ -8,9 +9,8 @@ import {
   markRFIDLost,
   unassignRFID,
 } from '../models/rfidModel.js';
-
 import { findUserById } from '../models/userModel.js';
-import { findRoomByGuestAndNumber } from '../models/roomsModel.js'; // <--- NEW
+import { findRoomByGuestAndNumber } from '../models/roomsModel.js';
 
 /**
  * GET all RFID tags (admin usage).
@@ -48,7 +48,6 @@ export const getAvailableRFIDTags = async (req, res) => {
         message: 'Database error: Unable to fetch available RFID tags',
       });
     }
-
     return res.status(200).json({
       success: true,
       message: 'Available RFID tags fetched successfully',
@@ -73,8 +72,6 @@ export const assignRFID = async (req, res) => {
         message: 'Guest ID and RFID UID are required.',
       });
     }
-
-    // Check if the guest actually exists
     const { data: guestData, error: guestError } = await findUserById(guest_id);
     if (guestError) {
       console.error('Error finding guest:', guestError);
@@ -83,8 +80,6 @@ export const assignRFID = async (req, res) => {
     if (!guestData) {
       return res.status(404).json({ success: false, message: 'Guest not found' });
     }
-
-    // Attempt assignment (must be status = 'available')
     const { data, error } = await assignRFIDToGuest(
       rfid_tag,
       guest_id,
@@ -97,16 +92,12 @@ export const assignRFID = async (req, res) => {
         message: 'Database error: Unable to assign RFID',
       });
     }
-
     if (!data) {
-      // Means the card was not 'available' or didn't match rfid_uid
       return res.status(400).json({
         success: false,
         message: 'RFID is not in an available state or does not exist.',
       });
     }
-
-    // If success
     return res.status(201).json({
       success: true,
       message: 'RFID assigned to guest successfully (status: assigned)',
@@ -126,11 +117,8 @@ export const activateRFIDTag = async (req, res) => {
   try {
     const { rfid_uid } = req.body;
     if (!rfid_uid) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'rfid_uid is required.' });
+      return res.status(400).json({ success: false, message: 'rfid_uid is required.' });
     }
-
     const { data, error } = await activateRFID(rfid_uid);
     if (error) {
       console.error('Error activating RFID:', error);
@@ -140,13 +128,11 @@ export const activateRFIDTag = async (req, res) => {
       });
     }
     if (!data) {
-      // Means it wasn't in 'assigned' status or doesn't exist
       return res.status(400).json({
         success: false,
         message: 'RFID not found or not in assigned status.',
       });
     }
-
     return res.status(200).json({
       success: true,
       message: 'RFID activated successfully (status: active)',
@@ -166,11 +152,8 @@ export const markRFIDAsLost = async (req, res) => {
   try {
     const { rfid_uid } = req.body;
     if (!rfid_uid) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'rfid_uid is required.' });
+      return res.status(400).json({ success: false, message: 'rfid_uid is required.' });
     }
-
     const { data, error } = await markRFIDLost(rfid_uid);
     if (error) {
       console.error('Error marking RFID lost:', error);
@@ -180,13 +163,11 @@ export const markRFIDAsLost = async (req, res) => {
       });
     }
     if (!data) {
-      // Means it wasn't found or was already lost
       return res.status(400).json({
         success: false,
         message: 'RFID not found or already lost.',
       });
     }
-
     return res.status(200).json({
       success: true,
       message: 'RFID status changed to lost',
@@ -206,11 +187,8 @@ export const unassignRFIDTag = async (req, res) => {
   try {
     const { rfid_uid } = req.body;
     if (!rfid_uid) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'rfid_uid is required.' });
+      return res.status(400).json({ success: false, message: 'rfid_uid is required.' });
     }
-
     const { data, error } = await unassignRFID(rfid_uid);
     if (error) {
       console.error('Error unassigning RFID:', error);
@@ -220,13 +198,11 @@ export const unassignRFIDTag = async (req, res) => {
       });
     }
     if (!data) {
-      // Means card wasn't found or was already available
       return res.status(400).json({
         success: false,
         message: 'RFID not found or already available.',
       });
     }
-
     return res.status(200).json({
       success: true,
       message: 'RFID unassigned successfully (status: available)',
@@ -240,21 +216,17 @@ export const unassignRFIDTag = async (req, res) => {
 
 /**
  * POST /api/rfid/verify
- * Check if an RFID card is valid for door access:
- * - Must have status in ('assigned','active')
+ * Verify an RFID for door access:
+ * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
- * - Must have a room_number=101 (or any logic you prefer)
+ * - The guest must have access to room 101.
  */
 export const verifyRFID = async (req, res) => {
   try {
     const { rfid_uid } = req.body;
     if (!rfid_uid) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'RFID UID is required.' });
+      return res.status(400).json({ success: false, message: 'RFID UID is required.' });
     }
-
-    // 1) Find RFID
     const { data: rfidData, error } = await findRFIDByUID(rfid_uid);
     if (error) {
       return res.status(500).json({ success: false, message: 'Error finding RFID.' });
@@ -262,35 +234,23 @@ export const verifyRFID = async (req, res) => {
     if (!rfidData) {
       return res.status(404).json({ success: false, message: 'RFID not found.' });
     }
-
-    // 2) Must be 'assigned' or 'active'
-    if (!['assigned','active'].includes(rfidData.status)) {
+    if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
         message: `RFID is found but not valid for entry (status: ${rfidData.status}).`,
       });
     }
-
-    // 3) Must have guest_id
     if (!rfidData.guest_id) {
       return res.status(403).json({
         success: false,
         message: 'RFID is not assigned to any guest.',
       });
     }
-
-    // 4) Fetch guest
     const { data: guestData } = await findUserById(rfidData.guest_id);
     if (!guestData) {
       return res.status(404).json({ success: false, message: 'Guest not found.' });
     }
-
-    // 5) Confirm the guest has a room_number=101
-    //    (You can make this dynamic if you have multiple doors.)
-    const { data: roomData, error: roomError } = await findRoomByGuestAndNumber(
-      rfidData.guest_id,
-      '101'
-    );
+    const { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, '101');
     if (roomError) {
       return res.status(500).json({
         success: false,
@@ -303,8 +263,6 @@ export const verifyRFID = async (req, res) => {
         message: 'Guest does not have access to room 101.',
       });
     }
-
-    // If everything checks out, return success
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',

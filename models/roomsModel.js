@@ -1,4 +1,5 @@
 // models/roomsModel.js
+
 import supabase from '../config/supabase.js';
 
 /**
@@ -22,7 +23,7 @@ export const createRoom = async (roomData) => {
 };
 
 /**
- * Find a room by its room_number (varchar).
+ * Find a room by its room_number.
  */
 export const findRoomByNumber = async (roomNumber) => {
   try {
@@ -43,7 +44,7 @@ export const findRoomByNumber = async (roomNumber) => {
 };
 
 /**
- * (NEW) Find a room by guest_id AND room_number
+ * (NEW) Find a room by guest_id AND room_number.
  */
 export const findRoomByGuestAndNumber = async (guestId, roomNumber) => {
   try {
@@ -126,14 +127,10 @@ export const updateRoom = async (roomId, updateFields) => {
 };
 
 /**
- * Update an existing room record by room_number (varchar).
- * If onlyIfAvailable=true, we also do .eq('status','available').
+ * Update an existing room record by room_number.
+ * If onlyIfAvailable=true, also restrict to rooms with status 'available'.
  */
-export const updateRoomByNumber = async (
-  roomNumber,
-  updateFields,
-  { onlyIfAvailable = false } = {}
-) => {
+export const updateRoomByNumber = async (roomNumber, updateFields, { onlyIfAvailable = false } = {}) => {
   try {
     let query = supabase
       .from('rooms')
@@ -144,7 +141,6 @@ export const updateRoomByNumber = async (
       query = query.eq('status', 'available');
     }
 
-    // Return the updated row
     const { data, error } = await query.select('*').single();
     if (error) {
       console.error('Error updating room by number:', error);

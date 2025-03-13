@@ -12,8 +12,6 @@ const __dirname = path.dirname(__filename);
 
 // Resolve .env from one level up (backend/.env)
 const envPath = path.resolve(__dirname, '../.env');
-
-// Load environment variables (without exposing sensitive info)
 dotenv.config({ path: envPath });
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -24,13 +22,14 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
+// Polyfill global fetch if not already available
 if (!globalThis.fetch) {
-  // Polyfill fetch if not available (node-fetch)
   globalThis.fetch = fetch;
 }
 
 console.log("\nSupabase client initialized successfully!");
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Explicitly pass fetch to the Supabase client options
+const supabase = createClient(supabaseUrl, supabaseKey, { fetch: globalThis.fetch });
 
 export default supabase;
