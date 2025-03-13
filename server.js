@@ -17,22 +17,14 @@ import accessLogRoutes from './routes/accessLogRoutes.js';
 import activityLogRoutes from './routes/activityLogRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
-
-// NEW
 import macAddressRoutes from './routes/macAddressRoutes.js';
-
 import { errorHandler } from './middlewares/errorHandler.js';
-
-// Import your enhanced scheduler
-import { startCronJobs } from './scheduler.js';
 
 dotenv.config();
 const app = express();
 
-// Accept JSON bodies
+// Middlewares
 app.use(express.json());
-// If you want form-encoded: app.use(express.urlencoded({ extended: true }));
-
 app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
@@ -49,15 +41,10 @@ app.use('/api/access-logs', accessLogRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/notifications', notificationRoutes);
-
-// NEW: MAC address
 app.use('/api/mac-address', macAddressRoutes);
 
 // Error Handling
 app.use(errorHandler);
-
-// Start the cron jobs after everything is set up
-startCronJobs();
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
