@@ -10,9 +10,10 @@ import {
   unassignRFID,
 } from '../models/rfidModel.js';
 import { findUserById } from '../models/userModel.js';
+import supabase from '../config/supabase.js'; // <--- Import Supabase directly if you want inline update
 import {
   findRoomByGuestAndNumber,
-  checkInRoom,
+  // checkInRoom,  // Optionally import if you prefer a helper function
 } from '../models/roomsModel.js';
 
 /**
@@ -223,8 +224,8 @@ export const unassignRFIDTag = async (req, res) => {
  * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
  * - The guest must have reserved room 101 (only that guest is allowed access)
- *
- * The verification logic is entirely based on the guest's reservation.
+ * - If the room is still 'reserved', automatically set it to 'occupied'
+ *   and compute check_in/check_out times.
  */
 export const verifyRFID = async (req, res) => {
   try {
@@ -290,7 +291,38 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 6) Return the verified data based solely on the guest’s reservation for room 101.
+    // 6) If the room is 'reserved', set it to 'occupied'
+    //    and set check_in/check_out times automatically.
+    if (roomData.status === 'reserved') {
+      // We'll compute checkInTime and checkOutTime based on hours_stay
+      const hoursStay = parseInt(roomData.hours_stay, 10) || 0;
+      const checkInTime = new Date();
+      // Add hours_stay hours to the checkInTime
+      const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
+
+      // Perform the update inline using supabase:
+      const { data: occupiedRoom, error: checkInError } = await supabase
+        .from('rooms')
+        .update({
+          status: 'occupied',
+          check_in: checkInTime.toISOString(),
+          check_out: checkOutTime.toISOString(),
+        })
+        .eq('id', roomData.id)
+        .single();
+
+      if (checkInError) {
+        console.error('Error updating room to occupied:', checkInError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error updating room to occupied.',
+        });
+      }
+
+      roomData = occupiedRoom;
+    }
+
+    // 7) Return the verified data
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
