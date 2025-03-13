@@ -1,217 +1,171 @@
-// models/roomsModel.js
+// models/rfidModel.js
 
 import supabase from '../config/supabase.js';
 
 /**
- * Create a new room record.
+ * Find an RFID by its UID.
  */
-export const createRoom = async (roomData) => {
+export const findRFIDByUID = async (rfid_uid) => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .insert([roomData])
-      .single();
-    if (error) {
-      console.error('Error creating room record:', error);
-      return { data: null, error };
-    }
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected error in createRoom:', err);
-    return { data: null, error: err };
-  }
-};
-
-/**
- * Find a room by its room_number.
- */
-export const findRoomByNumber = async (roomNumber) => {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('room_number', roomNumber.toString())
+      .from('rfid_tags')
+      .select('id, rfid_uid, guest_id, guest_name, status')
+      .eq('rfid_uid', rfid_uid)
       .maybeSingle();
+
     if (error) {
-      console.error('Error finding room by number:', error);
+      console.error('Error finding RFID:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in findRoomByNumber:', err);
+    console.error('Unexpected error in findRFIDByUID:', err);
     return { data: null, error: err };
   }
 };
 
 /**
- * Find a room by guest_id AND room_number.
+ * Fetch ALL RFID tags.
  */
-export const findRoomByGuestAndNumber = async (guestId, roomNumber) => {
+export const getAllRFIDs = async () => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('guest_id', guestId)
-      .eq('room_number', roomNumber.toString())
-      .maybeSingle();
-    if (error) {
-      console.error('Error finding room by guest & number:', error);
-      return { data: null, error };
-    }
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected error in findRoomByGuestAndNumber:', err);
-    return { data: null, error: err };
-  }
-};
-
-/**
- * Fetch a room record by its ID.
- */
-export const getRoomById = async (roomId) => {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', roomId)
-      .maybeSingle();
-    if (error) {
-      console.error('Error fetching room by id:', error);
-      return { data: null, error };
-    }
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected error in getRoomById:', err);
-    return { data: null, error: err };
-  }
-};
-
-/**
- * Fetch all room records.
- */
-export const getAllRooms = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('rooms')
+      .from('rfid_tags')
       .select('*');
     if (error) {
-      console.error('Error fetching all rooms:', error);
+      console.error('Error fetching all RFID tags:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in getAllRooms:', err);
+    console.error('Unexpected error in getAllRFIDs:', err);
     return { data: null, error: err };
   }
 };
 
 /**
- * Update room details by room ID.
+ * Fetch only RFID tags that are 'available'.
  */
-export const updateRoom = async (roomId, updateFields) => {
+export const getAvailableRFIDs = async () => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .update(updateFields)
-      .eq('id', roomId)
-      .single();
+      .from('rfid_tags')
+      .select('id, rfid_uid, status')
+      .eq('status', 'available');
     if (error) {
-      console.error('Error updating room:', error);
+      console.error('Error fetching available RFID tags:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in updateRoom:', err);
+    console.error('Unexpected error in getAvailableRFIDs:', err);
     return { data: null, error: err };
   }
 };
 
 /**
- * Update an existing room record by room_number.
- * If onlyIfAvailable=true, restrict to rooms with status 'available'.
+ * Assign an RFID to a guest (status -> 'assigned').
+ * Must be 'available' before assignment.
  */
-export const updateRoomByNumber = async (roomNumber, updateFields, { onlyIfAvailable = false } = {}) => {
-  try {
-    let query = supabase
-      .from('rooms')
-      .update(updateFields)
-      .eq('room_number', roomNumber.toString());
-
-    if (onlyIfAvailable) {
-      query = query.eq('status', 'available');
-    }
-
-    const { data, error } = await query.select('*').single();
-    if (error) {
-      console.error('Error updating room by number:', error);
-      return { data: null, error };
-    }
-    return { data, error: null };
-  } catch (err) {
-    console.error('Unexpected error in updateRoomByNumber:', err);
-    return { data: null, error: err };
-  }
-};
-
-/**
- * Delete a room record by ID.
- */
-export const deleteRoom = async (roomId) => {
+export const assignRFIDToGuest = async (rfid_uid, guest_id, guest_name) => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .delete()
-      .eq('id', roomId)
+      .from('rfid_tags')
+      .update({
+        guest_id,
+        guest_name,
+        status: 'assigned',
+      })
+      .eq('rfid_uid', rfid_uid)
+      .eq('status', 'available')
+      .select('id, rfid_uid, guest_id, guest_name, status')
       .single();
+
     if (error) {
-      console.error('Error deleting room:', error);
+      console.error('Error assigning RFID:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in deleteRoom:', err);
+    console.error('Unexpected error in assignRFIDToGuest:', err);
     return { data: null, error: err };
   }
 };
 
 /**
- * Check-In a guest into a room by ID (updates status to 'occupied').
+ * Activate an RFID (status -> 'active').
+ * Must be 'assigned' before activation.
  */
-export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()) => {
+export const activateRFID = async (rfid_uid) => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .update({ check_in: checkInTime, status: 'occupied' })
-      .eq('id', roomId)
+      .from('rfid_tags')
+      .update({ status: 'active' })
+      .eq('rfid_uid', rfid_uid)
+      .eq('status', 'assigned')
+      .select('id, rfid_uid, guest_id, guest_name, status')
       .single();
+
     if (error) {
-      console.error('Error during check-in:', error);
+      console.error('Error activating RFID:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in checkInRoom:', err);
+    console.error('Unexpected error in activateRFID:', err);
     return { data: null, error: err };
   }
 };
 
 /**
- * Check-Out a guest from a room by ID (updates status to 'vacant').
+ * Mark an RFID as lost (status -> 'lost').
  */
-export const checkOutRoom = async (roomId, checkOutTime = new Date().toISOString()) => {
+export const markRFIDLost = async (rfid_uid) => {
   try {
     const { data, error } = await supabase
-      .from('rooms')
-      .update({ check_out: checkOutTime, status: 'vacant' })
-      .eq('id', roomId)
+      .from('rfid_tags')
+      .update({ status: 'lost' })
+      .eq('rfid_uid', rfid_uid)
+      .neq('status', 'lost')
+      .select('id, rfid_uid, guest_id, guest_name, status')
       .single();
+
     if (error) {
-      console.error('Error during check-out:', error);
+      console.error('Error marking RFID lost:', error);
       return { data: null, error };
     }
     return { data, error: null };
   } catch (err) {
-    console.error('Unexpected error in checkOutRoom:', err);
+    console.error('Unexpected error in markRFIDLost:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
+ * Unassign an RFID (status -> 'available').
+ * Clears guest_id and guest_name.
+ */
+export const unassignRFID = async (rfid_uid) => {
+  try {
+    const { data, error } = await supabase
+      .from('rfid_tags')
+      .update({
+        guest_id: null,
+        guest_name: null,
+        status: 'available',
+      })
+      .eq('rfid_uid', rfid_uid)
+      .neq('status', 'available')
+      .select('id, rfid_uid, guest_id, guest_name, status')
+      .single();
+
+    if (error) {
+      console.error('Error unassigning RFID:', error);
+      return { data: null, error };
+    }
+    return { data, error: null };
+  } catch (err) {
+    console.error('Unexpected error in unassignRFID:', err);
     return { data: null, error: err };
   }
 };

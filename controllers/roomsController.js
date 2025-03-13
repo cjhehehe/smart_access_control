@@ -28,7 +28,7 @@ export const addRoom = async (req, res) => {
       });
     }
 
-    // Check if this room_number already exists
+    // Check if this room_number already exists – ensuring room 101 (or any room) is reserved only once.
     const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
     if (findError) {
       console.error('Error checking existing room:', findError);
@@ -99,6 +99,7 @@ export const assignRoomByNumber = async (req, res) => {
       registration_time: new Date().toISOString(),
     };
 
+    // Only update if the room is available
     const { data, error } = await updateRoomByNumber(room_number, updateFields, {
       onlyIfAvailable: true,
     });

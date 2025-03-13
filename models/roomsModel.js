@@ -44,7 +44,7 @@ export const findRoomByNumber = async (roomNumber) => {
 };
 
 /**
- * (NEW) Find a room by guest_id AND room_number.
+ * Find a room by guest_id AND room_number.
  */
 export const findRoomByGuestAndNumber = async (guestId, roomNumber) => {
   try {
@@ -128,7 +128,7 @@ export const updateRoom = async (roomId, updateFields) => {
 
 /**
  * Update an existing room record by room_number.
- * If onlyIfAvailable=true, also restrict to rooms with status 'available'.
+ * If onlyIfAvailable=true, restrict to rooms with status 'available'.
  */
 export const updateRoomByNumber = async (roomNumber, updateFields, { onlyIfAvailable = false } = {}) => {
   try {
@@ -176,6 +176,7 @@ export const deleteRoom = async (roomId) => {
 
 /**
  * Check-In a guest into a room by ID.
+ * Updates the room status to 'occupied' and sets the check_in time.
  */
 export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()) => {
   try {
@@ -197,6 +198,7 @@ export const checkInRoom = async (roomId, checkInTime = new Date().toISOString()
 
 /**
  * Check-Out a guest from a room by ID.
+ * Updates the room status to 'vacant' and sets the check_out time.
  */
 export const checkOutRoom = async (roomId, checkOutTime = new Date().toISOString()) => {
   try {

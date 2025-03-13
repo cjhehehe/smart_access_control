@@ -290,25 +290,7 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 6) (Optional) You could perform a room check-in update here.
-    // In our case the guest’s reservation is the key: if they reserved room 101,
-    // they are granted access. (Manual check-in via admin may still be available.)
-    // Uncomment the following if you want to automatically update the room:
-    /*
-    if (roomData.status === 'reserved') {
-      const { data: occupiedRoom, error: checkInError } = await checkInRoom(roomData.id);
-      if (checkInError) {
-        console.error('Error updating room to occupied:', checkInError);
-        return res.status(500).json({
-          success: false,
-          message: 'Error updating room to occupied.',
-        });
-      }
-      roomData = occupiedRoom;
-    }
-    */
-
-    // 7) Return the verified data
+    // 6) Return the verified data based solely on the guest’s reservation for room 101.
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
