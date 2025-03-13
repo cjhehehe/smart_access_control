@@ -4,13 +4,13 @@ import cron from 'node-cron';
 import supabase from './config/supabase.js';
 import { createNotification } from './models/notificationModel.js';
 import { resetRFIDByGuest } from './models/rfidModel.js';
-import { getAllAdmins } from './models/adminModel.js'; // <-- import the new function
+import { getAllAdmins } from './models/adminModel.js';
 
 /**
  * startCronJobs()
  *  1) Runs every minute.
  *  2) Checks all rooms with status='occupied'.
- *  3) If current time is near check_out time (e.g. 10 min left) -> send "stay ending soon" notification.
+ *  3) If current time is near check_out time (e.g. exactly 10 min left) -> send "stay ending soon" notification.
  *  4) If current time >= check_out time -> auto-check-out the guest.
  */
 export function startCronJobs() {
@@ -42,13 +42,20 @@ export function startCronJobs() {
       const diffMs = checkOutTime - now;
       const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
+      // Log for debugging (optional)
+      console.log(
+        `[CRON] Room ${room.room_number} -> diffMinutes=${diffMinutes}, ` +
+        `check_out=${checkOutTime.toISOString()}, now=${now.toISOString()}`
+      );
+
       // A) If exactly 10 minutes from check_out, send "stay ending soon" notification
       if (diffMinutes === 10) {
         await sendStayEndingNotification(room);
       }
 
       // B) If current time >= check_out => auto-check-out
-      if (now >= checkOutTime) {
+      //    i.e. diffMinutes <= 0 means time is up
+      if (diffMinutes <= 0) {
         await autoCheckOutRoom(room);
       }
     }
@@ -93,7 +100,7 @@ async function sendStayEndingNotification(room) {
 }
 
 /**
- * Automatically check-out a room:
+ * Automatically check-out a room if time is up:
  *  - room.status -> 'available'
  *  - check_in -> null
  *  - check_out -> null
@@ -102,6 +109,8 @@ async function sendStayEndingNotification(room) {
  */
 async function autoCheckOutRoom(room) {
   try {
+    console.log(`[CRON] Auto-checking out room ${room.room_number} (ID: ${room.id})...`);
+
     // 1) Update the room record
     const { data: updatedRoom, error: roomError } = await supabase
       .from('rooms')
