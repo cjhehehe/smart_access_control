@@ -1,5 +1,6 @@
-// controllers/rfidController.js
-
+/************************************************
+ * controllers/rfidController.js
+ ************************************************/
 import {
   findRFIDByUID,
   getAllRFIDs,
@@ -225,21 +226,24 @@ export const unassignRFIDTag = async (req, res) => {
  * Verify an RFID for door access:
  * - Must have status 'assigned' or 'active'
  * - Must reference a valid guest
- * - The guest must have reserved a room (room number provided in req.body)
+ * - The guest must have reserved a room
  * - If the room is 'reserved', automatically set it to 'occupied'
  *   and compute check_in/check_out times using hours_stay (in hours).
+ *
+ * By default, we expect "rfid_uid" and "room_number" in req.body.
+ * If "room_number" is missing, we attempt to auto-detect exactly one
+ * 'reserved' or 'occupied' room for the given guest. If found, we use it.
  */
 export const verifyRFID = async (req, res) => {
   try {
     const { rfid_uid, room_number } = req.body;
+
+    // 1) Check for RFID
     if (!rfid_uid) {
       return res.status(400).json({ success: false, message: 'RFID UID is required.' });
     }
-    if (!room_number) {
-      return res.status(400).json({ success: false, message: 'Room number is required for verification.' });
-    }
 
-    // 1) Look up the RFID record
+    // 2) Find the RFID record
     let { data: rfidData, error } = await findRFIDByUID(rfid_uid);
     if (error) {
       console.error('Error finding RFID:', error);
@@ -249,7 +253,7 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'RFID not found.' });
     }
 
-    // 2) Validate status – must be 'assigned' or 'active'
+    // 3) Validate RFID status
     if (!['assigned', 'active'].includes(rfidData.status)) {
       return res.status(403).json({
         success: false,
@@ -257,7 +261,7 @@ export const verifyRFID = async (req, res) => {
       });
     }
 
-    // 3) Verify that the RFID is linked to a guest
+    // 4) Verify that the RFID is linked to a guest
     if (!rfidData.guest_id) {
       return res.status(403).json({
         success: false,
@@ -269,8 +273,49 @@ export const verifyRFID = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Guest not found.' });
     }
 
-    // 4) Ensure the guest has reserved the provided room number
-    let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(rfidData.guest_id, room_number);
+    // ----------------------------------------------------
+    // 5) Determine which room to check
+    // If "room_number" is provided, we use it.
+    // If it's missing, attempt to auto-detect a single 'reserved' or 'occupied' room.
+    let targetRoomNumber = room_number; // may be undefined
+    if (!targetRoomNumber) {
+      // Attempt to find exactly ONE room for this guest with status='reserved' or 'occupied'
+      const { data: possibleRooms, error: fetchError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('guest_id', rfidData.guest_id)
+        .in('status', ['reserved', 'occupied']);
+
+      if (fetchError) {
+        console.error('Error fetching rooms for auto-detect:', fetchError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error fetching room information.',
+        });
+      }
+
+      if (!possibleRooms || possibleRooms.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'No reserved/occupied room found for this guest.',
+        });
+      }
+      if (possibleRooms.length > 1) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Multiple rooms found for this guest. Please specify which room_number.',
+        });
+      }
+      // Exactly 1 found
+      targetRoomNumber = possibleRooms[0].room_number;
+    }
+
+    // 6) Ensure the guest has reserved (or occupied) the target room
+    let { data: roomData, error: roomError } = await findRoomByGuestAndNumber(
+      rfidData.guest_id,
+      targetRoomNumber
+    );
     if (roomError) {
       console.error('Error checking room reservation:', roomError);
       return res.status(500).json({
@@ -281,11 +326,11 @@ export const verifyRFID = async (req, res) => {
     if (!roomData) {
       return res.status(403).json({
         success: false,
-        message: `Access denied: Guest has not reserved room ${room_number}.`,
+        message: `Access denied: Guest has not reserved room ${targetRoomNumber}.`,
       });
     }
 
-    // 5) If the RFID is 'assigned', upgrade it to 'active'
+    // 7) If RFID is 'assigned', upgrade it to 'active'
     if (rfidData.status === 'assigned') {
       const { data: updatedRFID, error: activationError } = await activateRFID(rfid_uid);
       if (activationError) {
@@ -298,7 +343,7 @@ export const verifyRFID = async (req, res) => {
       rfidData = updatedRFID;
     }
 
-    // 6) If the room is 'reserved', set it to 'occupied'
+    // 8) If the room is 'reserved', set it to 'occupied'
     //    and set check_in/check_out times automatically.
     if (roomData.status === 'reserved') {
       const rawHours = roomData.hours_stay;
@@ -310,9 +355,8 @@ export const verifyRFID = async (req, res) => {
       }
 
       const checkInTime = new Date();
-      const checkOutTime = new Date(checkInTime.getTime() + (hoursStay * 60 * 60 * 1000));
+      const checkOutTime = new Date(checkInTime.getTime() + hoursStay * 60 * 60 * 1000);
 
-      // Update room status to 'occupied' with proper check_in/check_out times
       const { data: occupiedRoom, error: checkInError } = await supabase
         .from('rooms')
         .update({
@@ -333,10 +377,12 @@ export const verifyRFID = async (req, res) => {
 
       roomData = occupiedRoom;
     } else {
-      console.log(`[verifyRFID] Room ${roomData.room_number} is currently '${roomData.status}' (no update).`);
+      console.log(
+        `[verifyRFID] Room ${roomData.room_number} is currently '${roomData.status}' (no status update).`
+      );
     }
 
-    // 7) Return the verified data
+    // 9) Return the verified data
     return res.status(200).json({
       success: true,
       message: 'RFID verified successfully.',
