@@ -10,6 +10,7 @@ import {
   roomCheckIn,
   roomCheckOut,
   assignRoomByNumber,
+  updateRoomStatusByNumber,
 } from '../controllers/roomsController.js';
 
 const router = express.Router();
@@ -39,5 +40,8 @@ router.post('/:id/checkin', roomCheckIn);
 
 // Check-Out endpoint: sets check_out time and status='available'
 router.post('/:id/checkout', roomCheckOut);
+
+// NEW: Update room status by room_number (similar to service-requests/ID/update-status)
+router.put('/:room_number/update-status', updateRoomStatusByNumber);
 
 export default router;

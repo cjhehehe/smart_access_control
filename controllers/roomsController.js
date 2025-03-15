@@ -11,6 +11,7 @@ import {
   updateRoomByNumber,
   findRoomByNumber,
 } from '../models/roomsModel.js';
+import { createNotification } from '../models/notificationModel.js';
 
 /**
  * POST /api/rooms
@@ -280,5 +281,101 @@ export const roomCheckOut = async (req, res) => {
   } catch (error) {
     console.error('Unexpected error in roomCheckOut:', error);
     return res.status(500).json({ success: false, message: 'Internal server error', error });
+  }
+};
+
+/**
+ * PUT /api/rooms/:room_number/update-status
+ * Update a room's status by room_number and create a notification for the occupant if applicable.
+ */
+export const updateRoomStatusByNumber = async (req, res) => {
+  try {
+    const { room_number } = req.params;
+    const { status, note } = req.body;
+
+    if (!room_number || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing room_number or status in request.',
+      });
+    }
+
+    // 1) Find the room by number
+    const { data: existingRoom, error: findError } = await findRoomByNumber(room_number);
+    if (findError) {
+      console.error('Error finding room by number:', findError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Could not find room.',
+        error: findError,
+      });
+    }
+    if (!existingRoom) {
+      return res.status(404).json({
+        success: false,
+        message: `Room ${room_number} not found.`,
+      });
+    }
+
+    // 2) Update the room record
+    const { data: updatedRoom, error: updateError } = await updateRoomByNumber(
+      room_number,
+      { status }
+    );
+    if (updateError) {
+      console.error('Error updating room status:', updateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error: Unable to update room status.',
+        error: updateError,
+      });
+    }
+    if (!updatedRoom) {
+      return res.status(404).json({
+        success: false,
+        message: `Room ${room_number} could not be updated.`,
+      });
+    }
+
+    // 3) If a guest is assigned, create a notification for the occupant.
+    if (updatedRoom.guest_id) {
+      try {
+        let statusLabel = status;
+        if (status === 'available') statusLabel = 'Available';
+        else if (status === 'reserved') statusLabel = 'Reserved';
+        else if (status === 'occupied') statusLabel = 'Occupied';
+        else if (status === 'maintenance') statusLabel = 'Maintenance';
+
+        const notifTitle = 'Room Status Updated';
+        const notifMessage = `Your room #${room_number} is now ${statusLabel}.`;
+        // Create a notification for the guest
+        const { error: notifError } = await createNotification({
+          recipient_guest_id: updatedRoom.guest_id,
+          title: notifTitle,
+          message: notifMessage,
+          note_message: note || null,
+          notification_type: 'room_status',
+        });
+
+        if (notifError) {
+          console.error('Failed to create occupant notification:', notifError);
+        }
+      } catch (notifCatchErr) {
+        console.error('Unexpected error creating occupant notification:', notifCatchErr);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Room #${room_number} status updated to ${status}.`,
+      data: updatedRoom,
+    });
+  } catch (err) {
+    console.error('Unexpected error in updateRoomStatusByNumber:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: err,
+    });
   }
 };
