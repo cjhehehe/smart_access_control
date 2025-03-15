@@ -34,7 +34,10 @@ export const getAllRFIDTags = async (req, res) => {
     });
   } catch (error) {
     console.error('[getAllRFIDTags] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
@@ -58,12 +61,16 @@ export const getAvailableRFIDTags = async (req, res) => {
     });
   } catch (error) {
     console.error('[getAvailableRFIDTags] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
 /**
  * POST /api/rfid/assign
+ * Assign an RFID to a specific guest_id.
  */
 export const assignRFID = async (req, res) => {
   try {
@@ -85,7 +92,10 @@ export const assignRFID = async (req, res) => {
       });
     }
     if (!guestData) {
-      return res.status(404).json({ success: false, message: 'Guest not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Guest not found.',
+      });
     }
 
     // Check that the RFID exists and is available
@@ -133,7 +143,10 @@ export const assignRFID = async (req, res) => {
     });
   } catch (error) {
     console.error('[assignRFID] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
@@ -170,7 +183,10 @@ export const activateRFIDTag = async (req, res) => {
     });
   } catch (error) {
     console.error('[activateRFIDTag] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
@@ -207,7 +223,10 @@ export const markRFIDAsLost = async (req, res) => {
     });
   } catch (error) {
     console.error('[markRFIDAsLost] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
@@ -244,13 +263,16 @@ export const unassignRFIDTag = async (req, res) => {
     });
   } catch (error) {
     console.error('[unassignRFIDTag] Unexpected error:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    });
   }
 };
 
 /**
  * PUT /api/rfid/update-status
- * A unified method to update an RFID's status to available, active, lost, etc.
+ * A unified method to update an RFID's status to 'available', 'assigned', 'active', 'lost', etc.
  */
 export const updateRFIDStatus = async (req, res) => {
   try {
@@ -296,6 +318,24 @@ export const updateRFIDStatus = async (req, res) => {
       const { data, error } = await unassignRFID(rfid_uid);
       if (error) throw error;
       updatedData = data;
+    } else if (newStatus === 'assigned') {
+      // => Directly set to 'assigned' (no new guest_id). If you want to assign a specific guest,
+      //    call /rfid/assign or adapt logic here to pass guest_id.
+      const { data, error } = await supabase
+        .from('rfid_tags')
+        .update({ status: 'assigned' })
+        .eq('rfid_uid', rfid_uid)
+        .neq('status', 'assigned')
+        .select('id, rfid_uid, guest_id, status')
+        .single();
+      if (error) {
+        console.error('[updateRFIDStatus] Error setting RFID assigned:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error: Unable to set RFID to assigned.',
+        });
+      }
+      updatedData = data;
     } else if (newStatus === 'active') {
       // => activate
       const { data, error } = await activateRFID(rfid_uid);
@@ -306,12 +346,6 @@ export const updateRFIDStatus = async (req, res) => {
       const { data, error } = await markRFIDLost(rfid_uid);
       if (error) throw error;
       updatedData = data;
-    } else if (newStatus === 'assigned') {
-      // Typically "assign" needs a guest_id, so show an error
-      return res.status(400).json({
-        success: false,
-        message: "To set status 'assigned', please call /rfid/assign with a guest_id.",
-      });
     } else {
       return res.status(400).json({
         success: false,
@@ -358,7 +392,10 @@ export const verifyRFID = async (req, res) => {
       });
     }
     if (!rfidData) {
-      return res.status(404).json({ success: false, message: 'RFID not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'RFID not found.',
+      });
     }
 
     // 2) Validate RFID status
@@ -385,7 +422,10 @@ export const verifyRFID = async (req, res) => {
       });
     }
     if (!guestData) {
-      return res.status(404).json({ success: false, message: 'Guest not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Guest not found.',
+      });
     }
 
     // 4) Determine the target room
